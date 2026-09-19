@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Calendar, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { BusinessCalendarModal } from '../calendar/BusinessCalendarModal';
 
 interface HeaderProps {
   title: string;
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -120,26 +122,39 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Date & Time Widget */}
-        <div
+        {/* Date & Time Button (Click to open Business Calendar) */}
+        <button
+          type="button"
+          onClick={() => setIsCalendarOpen(true)}
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            padding: '6px 14px',
+            padding: '7px 16px',
             borderRadius: '9999px',
             backgroundColor: 'var(--color-neutral-200)',
             border: '1px solid var(--color-neutral-300)',
             fontSize: '12px',
             fontWeight: 600,
-            color: 'var(--color-neutral-700)',
+            color: 'var(--color-neutral-800)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
           }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--color-primary-50)';
+            e.currentTarget.style.borderColor = 'var(--color-primary-300)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--color-neutral-200)';
+            e.currentTarget.style.borderColor = 'var(--color-neutral-300)';
+          }}
+          title="Click to view Monthly Financial Calendar & Daily Profits"
         >
-          <Calendar size={13} color="var(--color-neutral-500)" />
+          <Calendar size={14} color="var(--color-primary-800)" />
           <span>{formattedDate}</span>
           <span style={{ color: 'var(--color-neutral-400)' }}>•</span>
           <span style={{ color: 'var(--color-neutral-900)', fontWeight: 700 }}>{formattedTime}</span>
-        </div>
+        </button>
 
         {/* Main CTA with white plus icon */}
         {onQuickAction && (
@@ -153,6 +168,12 @@ export const Header: React.FC<HeaderProps> = ({
           </Button>
         )}
       </div>
+
+      {/* Monthly Business Calendar Modal */}
+      <BusinessCalendarModal
+        isOpen={isCalendarOpen}
+        onClose={() => setIsCalendarOpen(false)}
+      />
     </header>
   );
 };
