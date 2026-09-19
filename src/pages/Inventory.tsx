@@ -197,10 +197,24 @@ export const Inventory: React.FC = () => {
       <Header
         title="Inventory & Stock Management"
         subtitle="Live warehouse stock tracking, threshold warnings, and movement audit log"
+        quickActionLabel="Adjust Stock"
+        onQuickAction={() => {
+          if (filteredProducts.length > 0) {
+            setSelectedProductForAdjust(filteredProducts[0]);
+          }
+        }}
         onSearch={setSearchQuery}
       />
 
-      <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{
+        padding: '24px 28px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px',
+        minWidth: 0,
+        maxWidth: '100%',
+        boxSizing: 'border-box',
+      }}>
         {/* Navigation Switcher */}
         <div style={{
           display: 'flex',
@@ -225,9 +239,10 @@ export const Inventory: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
+                transition: 'all var(--transition-fast)',
               }}
             >
-              <Warehouse size={15} />
+              <Warehouse size={15} color={activeView === 'levels' ? '#FFFFFF' : 'var(--color-neutral-600)'} />
               <span>Stock Quantities</span>
             </button>
 
@@ -246,9 +261,10 @@ export const Inventory: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
+                transition: 'all var(--transition-fast)',
               }}
             >
-              <History size={15} />
+              <History size={15} color={activeView === 'movements' ? '#FFFFFF' : 'var(--color-neutral-600)'} />
               <span>Movement Audit Trail ({movements.length})</span>
             </button>
           </div>

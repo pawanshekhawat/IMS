@@ -10,19 +10,22 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', width: '100%', height: '100vh', overflow: 'hidden' }}>
       <Sidebar onNewSaleClick={handleNewSaleClick} />
       <main
         style={{
           flex: 1,
+          minWidth: 0,
+          maxWidth: '100%',
           height: '100vh',
           display: 'flex',
           flexDirection: 'column',
           backgroundColor: 'var(--color-neutral-200)',
           overflow: 'hidden',
+          position: 'relative',
         }}
       >
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
           <Outlet />
         </div>
       </main>

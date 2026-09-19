@@ -42,6 +42,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
       style={{
         width: '260px',
         minWidth: '260px',
+        maxWidth: '260px',
+        flexShrink: 0,
         height: '100vh',
         backgroundColor: '#FFFFFF',
         borderRight: '1px solid var(--color-neutral-300)',

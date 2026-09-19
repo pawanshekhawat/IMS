@@ -54,6 +54,8 @@ export const Settings: React.FC = () => {
       <Header
         title="App Settings & System Controls"
         subtitle="OTA desktop updates, showroom store profile, and database management"
+        quickActionLabel="Reseed Database"
+        onQuickAction={handleResetData}
       />
 
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>

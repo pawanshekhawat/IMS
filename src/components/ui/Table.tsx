@@ -25,12 +25,15 @@ export function Table<T>({
   return (
     <div style={{
       width: '100%',
+      maxWidth: '100%',
+      minWidth: 0,
       overflowX: 'auto',
       borderRadius: 'var(--radius-lg)',
       border: '1px solid var(--color-neutral-300)',
       background: 'var(--color-neutral-50)',
+      boxShadow: 'var(--shadow-sm)',
     }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+      <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{
             backgroundColor: 'var(--color-neutral-200)',

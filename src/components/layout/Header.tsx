@@ -51,6 +51,10 @@ export const Header: React.FC<HeaderProps> = ({
     <header
       style={{
         height: '74px',
+        minHeight: '74px',
+        flexShrink: 0,
+        width: '100%',
+        boxSizing: 'border-box',
         padding: '0 28px',
         backgroundColor: '#FFFFFF',
         borderBottom: '1px solid var(--color-neutral-300)',
@@ -61,20 +65,20 @@ export const Header: React.FC<HeaderProps> = ({
       }}
     >
       {/* Page Title & Breadcrumb */}
-      <div>
-        <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
+      <div style={{ minWidth: 0, flexShrink: 1, marginRight: '16px' }}>
+        <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--color-neutral-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {title}
         </h2>
         {subtitle && (
-          <p style={{ fontSize: '13px', color: 'var(--color-neutral-500)', marginTop: '2px' }}>
+          <p style={{ fontSize: '13px', color: 'var(--color-neutral-500)', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {subtitle}
           </p>
         )}
       </div>
 
       {/* Center Search / Action Area */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <div style={{ position: 'relative', width: '280px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
+        <div style={{ position: 'relative', width: '260px', flexShrink: 0 }}>
           <Search
             size={16}
             color="var(--color-neutral-500)"
@@ -138,6 +142,8 @@ export const Header: React.FC<HeaderProps> = ({
             fontWeight: 600,
             color: 'var(--color-neutral-800)',
             cursor: 'pointer',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
             transition: 'all 0.15s ease',
           }}
           onMouseEnter={(e) => {
@@ -158,14 +164,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Main CTA with white plus icon */}
         {onQuickAction && (
-          <Button
-            variant="primary"
-            size="md"
-            icon={<Plus size={16} color="#FFFFFF" strokeWidth={2.5} />}
-            onClick={onQuickAction}
-          >
-            {quickActionLabel.replace(/^\+\s*/, '')}
-          </Button>
+          <div style={{ flexShrink: 0 }}>
+            <Button
+              variant="primary"
+              size="md"
+              icon={<Plus size={16} color="#FFFFFF" strokeWidth={2.5} />}
+              onClick={onQuickAction}
+            >
+              {quickActionLabel.replace(/^\+\s*/, '')}
+            </Button>
+          </div>
         )}
       </div>
 

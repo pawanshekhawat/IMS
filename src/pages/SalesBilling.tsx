@@ -235,9 +235,10 @@ export const SalesBilling: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            transition: 'all var(--transition-fast)',
           }}
         >
-          <ShoppingCart size={15} />
+          <ShoppingCart size={15} color={activeTab === 'pos' ? '#FFFFFF' : 'var(--color-neutral-600)'} />
           <span>Point of Sale (Active Cart: {cart.length})</span>
         </button>
 
@@ -256,9 +257,10 @@ export const SalesBilling: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
+            transition: 'all var(--transition-fast)',
           }}
         >
-          <History size={15} />
+          <History size={15} color={activeTab === 'history' ? '#FFFFFF' : 'var(--color-neutral-600)'} />
           <span>Sales Invoices History ({salesHistory.length})</span>
         </button>
       </div>
