@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Printer, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
@@ -31,53 +31,109 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     minute: '2-digit',
   });
 
+  const formatCurrency = (amount: number) => {
+    // Avoid ugly floating-point math like 30878.239999999998
+    const rounded = Math.round((amount + Number.EPSILON) * 100) / 100;
+    return rounded % 1 === 0
+      ? rounded.toLocaleString('en-IN')
+      : rounded.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Invoice & Receipt"
-      subtitle={`Invoice #${sale.invoiceNumber}`}
-      maxWidth={printFormat === 'A4' ? '780px' : '480px'}
+      title="Invoice & Receipt Preview"
+      subtitle={`Invoice #${sale.invoiceNumber} • ${sale.customerName}`}
+      maxWidth={printFormat === 'A4' ? '820px' : '540px'}
       footer={
-        <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button
-              variant={printFormat === 'A4' ? 'primary' : 'outlined'}
-              size="sm"
-              icon={<FileText size={14} />}
-              onClick={() => setPrintFormat('A4')}
-              type="button"
-            >
-              A4 Tax Invoice
-            </Button>
-            <Button
-              variant={printFormat === 'Thermal' ? 'primary' : 'outlined'}
-              size="sm"
-              icon={<ReceiptIcon size={14} />}
-              onClick={() => setPrintFormat('Thermal')}
-              type="button"
-            >
-              80mm Thermal Slip
-            </Button>
-          </div>
+        <div style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          flexWrap: 'wrap',
+        }}>
+          <Button variant="outlined" size="md" onClick={onClose} type="button">
+            Close
+          </Button>
 
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <Button variant="outlined" size="sm" onClick={onClose} type="button">
-              Close
-            </Button>
-            <Button
-              variant="tertiary"
-              size="sm"
-              icon={<Printer size={15} />}
-              onClick={handlePrint}
-              type="button"
-            >
-              Print Document
-            </Button>
-          </div>
+          <Button
+            variant="tertiary"
+            size="md"
+            icon={<Printer size={16} />}
+            onClick={handlePrint}
+            type="button"
+            style={{ minWidth: '150px' }}
+          >
+            {printFormat === 'A4' ? 'Print A4 Invoice' : 'Print Thermal Slip'}
+          </Button>
         </div>
       }
     >
+      {/* Format Selector Pill Tabs (Screen Only - Hidden in Print) */}
+      <div className="no-print" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: '16px',
+      }}>
+        <div style={{
+          display: 'inline-flex',
+          padding: '4px',
+          backgroundColor: 'var(--color-neutral-250)',
+          borderRadius: 'var(--radius-full)',
+          border: '1px solid var(--color-neutral-300)',
+          gap: '6px',
+        }}>
+          <button
+            type="button"
+            onClick={() => setPrintFormat('A4')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 18px',
+              borderRadius: 'var(--radius-full)',
+              border: 'none',
+              backgroundColor: printFormat === 'A4' ? 'var(--color-primary-800)' : 'transparent',
+              color: printFormat === 'A4' ? '#FFFFFF' : 'var(--color-neutral-700)',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <FileText size={15} color={printFormat === 'A4' ? '#FFFFFF' : 'currentColor'} />
+            A4 Tax Invoice
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPrintFormat('Thermal')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 18px',
+              borderRadius: 'var(--radius-full)',
+              border: 'none',
+              backgroundColor: printFormat === 'Thermal' ? 'var(--color-primary-800)' : 'transparent',
+              color: printFormat === 'Thermal' ? '#FFFFFF' : 'var(--color-neutral-700)',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <ReceiptIcon size={15} color={printFormat === 'Thermal' ? '#FFFFFF' : 'currentColor'} />
+            80mm Thermal Slip
+          </button>
+        </div>
+      </div>
+
+      {/* Printable Paper Area */}
       <div className="printable-area" style={{ color: '#111827', fontSize: '13px', lineHeight: '1.4' }}>
         {printFormat === 'A4' ? (
           /* A4 Standard Tax Invoice Format */
@@ -178,8 +234,8 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                     <td style={{ padding: '10px', fontSize: '13px', fontWeight: 600 }}>{item.productName}</td>
                     <td style={{ padding: '10px', fontSize: '11px', color: '#6B7280' }}>{item.sku}</td>
                     <td style={{ padding: '10px', fontSize: '12px', textAlign: 'center' }}>{item.quantity} {item.unit}</td>
-                    <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right' }}>₹{item.unitPrice.toLocaleString('en-IN')}</td>
-                    <td style={{ padding: '10px', fontSize: '13px', fontWeight: 700, textAlign: 'right' }}>₹{item.total.toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '10px', fontSize: '12px', textAlign: 'right' }}>₹{formatCurrency(item.unitPrice)}</td>
+                    <td style={{ padding: '10px', fontSize: '13px', fontWeight: 700, textAlign: 'right' }}>₹{formatCurrency(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -190,18 +246,18 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
               <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4B5563' }}>
                   <span>Subtotal:</span>
-                  <span>₹{sale.subtotal.toLocaleString('en-IN')}</span>
+                  <span>₹{formatCurrency(sale.subtotal)}</span>
                 </div>
                 {sale.taxAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4B5563' }}>
                     <span>GST ({sale.taxRate}% Included):</span>
-                    <span>₹{sale.taxAmount.toLocaleString('en-IN')}</span>
+                    <span>₹{formatCurrency(sale.taxAmount)}</span>
                   </div>
                 )}
                 {sale.discountAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#DC2626' }}>
                     <span>Discount:</span>
-                    <span>-₹{sale.discountAmount.toLocaleString('en-IN')}</span>
+                    <span>-₹{formatCurrency(sale.discountAmount)}</span>
                   </div>
                 )}
                 <div style={{
@@ -215,7 +271,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                   marginTop: '4px',
                 }}>
                   <span>Grand Total:</span>
-                  <span>₹{sale.grandTotal.toLocaleString('en-IN')}</span>
+                  <span>₹{formatCurrency(sale.grandTotal)}</span>
                 </div>
               </div>
             </div>
@@ -238,54 +294,62 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
         ) : (
           /* 80mm Thermal Receipt Format */
           <div style={{
-            maxWidth: '300px',
+            maxWidth: '340px',
             margin: '0 auto',
-            padding: '16px',
+            padding: '20px',
             border: '1px dashed #9CA3AF',
             fontFamily: 'monospace',
             fontSize: '12px',
             backgroundColor: '#FAFAFA',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           }}>
             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 900, margin: 0 }}>GARHWAL LIGHTS</h2>
-              <p style={{ margin: '2px 0', fontSize: '11px' }}>Showroom - Dehradun</p>
-              <p style={{ margin: '2px 0', fontSize: '10px' }}>Ph: 9897000123</p>
-              <p style={{ margin: '4px 0 0 0', borderTop: '1px dashed #000', paddingTop: '4px' }}>
+              <h2 style={{ fontSize: '17px', fontWeight: 900, margin: 0, color: '#000' }}>GARHWAL LIGHTS</h2>
+              <p style={{ margin: '2px 0', fontSize: '11px', color: '#374151' }}>Showroom - Dehradun</p>
+              <p style={{ margin: '2px 0', fontSize: '10px', color: '#4B5563' }}>Ph: +91 98970 00123</p>
+              <p style={{ margin: '6px 0 0 0', borderTop: '1px dashed #000', paddingTop: '6px', fontWeight: 700 }}>
                 Inv: {sale.invoiceNumber}
               </p>
-              <p style={{ margin: 0, fontSize: '10px' }}>{formattedDate}</p>
+              <p style={{ margin: 0, fontSize: '10px', color: '#6B7280' }}>{formattedDate}</p>
             </div>
 
-            <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '6px 0', margin: '8px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+            <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', margin: '8px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, paddingBottom: '4px' }}>
                 <span>Item</span>
                 <span>Qty x Rate</span>
                 <span>Total</span>
               </div>
               {sale.items.map((i, idx) => (
-                <div key={idx} style={{ marginTop: '4px' }}>
-                  <div>{i.productName.slice(0, 24)}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#4B5563', fontSize: '11px' }}>
-                    <span>{i.quantity} {i.unit} @ ₹{i.unitPrice}</span>
-                    <span style={{ fontWeight: 700, color: '#000' }}>₹{i.total}</span>
+                <div key={idx} style={{ marginTop: '6px' }}>
+                  <div style={{ fontWeight: 700 }}>{i.productName}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#4B5563', fontSize: '11px', marginTop: '1px' }}>
+                    <span>{i.quantity} {i.unit} @ ₹{formatCurrency(i.unitPrice)}</span>
+                    <span style={{ fontWeight: 700, color: '#000' }}>₹{formatCurrency(i.total)}</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              <div>Subtotal: ₹{sale.subtotal}</div>
-              {sale.taxAmount > 0 && <div>GST: ₹{sale.taxAmount}</div>}
-              {sale.discountAmount > 0 && <div>Discount: -₹{sale.discountAmount}</div>}
-              <div style={{ fontSize: '14px', fontWeight: 900, borderTop: '1px solid #000', paddingTop: '4px' }}>
-                TOTAL: ₹{sale.grandTotal}
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div>Subtotal: ₹{formatCurrency(sale.subtotal)}</div>
+              {sale.taxAmount > 0 && <div>GST ({sale.taxRate}%): ₹{formatCurrency(sale.taxAmount)}</div>}
+              {sale.discountAmount > 0 && <div style={{ color: '#DC2626' }}>Discount: -₹{formatCurrency(sale.discountAmount)}</div>}
+              <div style={{
+                fontSize: '15px',
+                fontWeight: 900,
+                borderTop: '1.5px solid #000',
+                paddingTop: '6px',
+                marginTop: '4px',
+                color: '#000',
+              }}>
+                TOTAL: ₹{formatCurrency(sale.grandTotal)}
               </div>
-              <div style={{ fontSize: '11px' }}>Paid via: {sale.paymentMethod}</div>
+              <div style={{ fontSize: '11px', color: '#4B5563' }}>Paid via: <strong>{sale.paymentMethod}</strong></div>
             </div>
 
-            <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '10px' }}>
-              <p style={{ margin: 0 }}>Thank you for lighting your home with us!</p>
-              <p style={{ margin: '2px 0 0 0' }}>Visit Again</p>
+            <div style={{ textAlign: 'center', marginTop: '18px', fontSize: '11px', borderTop: '1px dashed #D1D5DB', paddingTop: '10px' }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>Thank you for lighting your home with us!</p>
+              <p style={{ margin: '2px 0 0 0', color: '#6B7280' }}>Please Visit Again</p>
             </div>
           </div>
         )}
