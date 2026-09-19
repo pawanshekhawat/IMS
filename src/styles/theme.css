@@ -1,0 +1,84 @@
+/* 
+ * Global Color & Design Token Variables
+ * All colors are driven by src/theme/colors.ts
+ * Modify values here or in colors.ts to update across the entire app
+ */
+
+:root {
+  /* Brand Primary - Deep Spruce / Forest Emerald */
+  --color-primary-50: #edfbf7;
+  --color-primary-100: #d8faef;
+  --color-primary-200: #a7f3e2;
+  --color-primary-300: #6ee0c5;
+  --color-primary-400: #34c4a2;
+  --color-primary-500: #1fa384;
+  --color-primary-600: #128067;
+  --color-primary-700: #0b6652;
+  --color-primary-800: #064D3D;
+  --color-primary-900: #043228;
+  --color-primary: var(--color-primary-800);
+
+  /* Brand Secondary - Natural Olive / Meadow Green */
+  --color-secondary-50: #f7fee7;
+  --color-secondary-100: #ecfccb;
+  --color-secondary-200: #d9f99d;
+  --color-secondary-300: #bef264;
+  --color-secondary-400: #a3e635;
+  --color-secondary-500: #84cc16;
+  --color-secondary-600: #65A30D;
+  --color-secondary-700: #4d7c0f;
+  --color-secondary-800: #3f6608;
+  --color-secondary-900: #274005;
+  --color-secondary: var(--color-secondary-600);
+
+  /* Brand Tertiary - Vibrant Chartreuse / Lime Accent */
+  --color-tertiary-50: #f7fee7;
+  --color-tertiary-100: #ecfccb;
+  --color-tertiary-200: #d9f99d;
+  --color-tertiary-300: #bef264;
+  --color-tertiary-400: #a3e635;
+  --color-tertiary-500: #84CC16;
+  --color-tertiary-600: #65a30d;
+  --color-tertiary: var(--color-tertiary-500);
+
+  /* Neutrals & Surfaces */
+  --color-neutral-50: #FFFFFF;
+  --color-neutral-100: #FDFDFD;
+  --color-neutral-200: #F2F5F2; /* App canvas background */
+  --color-neutral-250: #EBF0EC; /* Card subtle background */
+  --color-neutral-300: #DFE6E1; /* Card borders */
+  --color-neutral-400: #C2CEC5; /* Inputs & divider lines */
+  --color-neutral-500: #7C9184; /* Muted captions & secondary */
+  --color-neutral-600: #4D6154; /* Body text */
+  --color-neutral-700: #2C3E33; /* Subheadings */
+  --color-neutral-800: #19271F; /* Dark / Inverted pill buttons */
+  --color-neutral-900: #0C1711; /* Main text */
+
+  /* Functional Status */
+  --color-success: #15803d;
+  --color-success-bg: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-bg: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-info: #0284c7;
+  --color-info-bg: #e0f2fe;
+
+  /* Typography & Layout */
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(12, 23, 17, 0.04);
+  --shadow-md: 0 4px 12px rgba(12, 23, 17, 0.06);
+  --shadow-lg: 0 12px 30px rgba(12, 23, 17, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(6, 77, 61, 0.2);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
