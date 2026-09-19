@@ -141,15 +141,15 @@ export const Header: React.FC<HeaderProps> = ({
           <span style={{ color: 'var(--color-neutral-900)', fontWeight: 700 }}>{formattedTime}</span>
         </div>
 
-        {/* Main CTA */}
+        {/* Main CTA with white plus icon */}
         {onQuickAction && (
           <Button
             variant="primary"
             size="md"
-            icon={<Plus size={16} />}
+            icon={<Plus size={16} color="#FFFFFF" strokeWidth={2.5} />}
             onClick={onQuickAction}
           >
-            {quickActionLabel}
+            {quickActionLabel.replace(/^\+\s*/, '')}
           </Button>
         )}
       </div>

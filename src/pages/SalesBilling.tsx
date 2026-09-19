@@ -209,7 +209,7 @@ export const SalesBilling: React.FC = () => {
       <Header
         title="Billing & Sales (POS)"
         subtitle="Fast showroom billing, barcode checkout, and instant GST invoice printing"
-        quickActionLabel="+ View Sales History"
+        quickActionLabel={activeTab === 'pos' ? 'View Sales History' : 'Back to POS'}
         onQuickAction={() => setActiveTab(activeTab === 'pos' ? 'history' : 'pos')}
       />
 

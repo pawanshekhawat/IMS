@@ -143,7 +143,7 @@ export const Purchases: React.FC = () => {
       <Header
         title="Purchase Orders (PO)"
         subtitle="Manage restock orders, incoming shipments, and auto-inward into stock"
-        quickActionLabel="+ Create PO"
+        quickActionLabel="Create PO"
         onQuickAction={() => setIsModalOpen(true)}
         onSearch={setSearchQuery}
       />

@@ -49,7 +49,7 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
-p, span, label {
+p, label {
   color: var(--color-neutral-600);
   font-weight: 500;
 }
@@ -71,6 +71,10 @@ p, span, label {
   white-space: nowrap;
   text-decoration: none;
 }
+.btn span, .btn svg {
+  color: inherit;
+  stroke: currentColor;
+}
 .btn:active {
   transform: scale(0.98);
 }
@@ -82,7 +86,11 @@ p, span, label {
 
 .btn-primary {
   background-color: var(--color-primary-800);
-  color: #FFFFFF;
+  color: #FFFFFF !important;
+}
+.btn-primary, .btn-primary span, .btn-primary svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
 }
 .btn-primary:hover {
   background-color: var(--color-primary-700);
@@ -101,7 +109,11 @@ p, span, label {
 
 .btn-inverted {
   background-color: var(--color-neutral-800);
-  color: #FFFFFF;
+  color: #FFFFFF !important;
+}
+.btn-inverted, .btn-inverted span, .btn-inverted svg {
+  color: #FFFFFF !important;
+  stroke: #FFFFFF !important;
 }
 .btn-inverted:hover {
   background-color: var(--color-neutral-900);

@@ -140,7 +140,7 @@ export const Expenses: React.FC = () => {
       <Header
         title="Showroom Expenses"
         subtitle="Track rent, commercial electricity, staff wages, and showroom overheads"
-        quickActionLabel="+ Record Expense"
+        quickActionLabel="Record Expense"
         onQuickAction={() => setIsModalOpen(true)}
         onSearch={setSearchQuery}
       />

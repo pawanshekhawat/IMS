@@ -250,7 +250,7 @@ export const Products: React.FC = () => {
       <Header
         title="Products & Lighting Catalog"
         subtitle="Manage showroom inventory, pricing, SKUs, and stock limits"
-        quickActionLabel="+ Add Product"
+        quickActionLabel="Add Product"
         onQuickAction={() => {
           setProductToEdit(null);
           setIsCrudModalOpen(true);

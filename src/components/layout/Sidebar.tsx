@@ -104,10 +104,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
       <nav
         style={{
           flex: 1,
-          padding: '16px 14px',
+          padding: '18px 14px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '4px',
+          gap: '6px',
           overflowY: 'auto',
         }}
       >
@@ -121,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '10px 16px',
+                padding: '11px 16px',
                 borderRadius: '9999px', // pill shape as per design
                 textDecoration: 'none',
                 backgroundColor: isActive ? 'var(--color-primary-800)' : 'transparent',
@@ -149,7 +149,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
                       color={isActive ? '#FFFFFF' : 'var(--color-neutral-600)'}
                       strokeWidth={isActive ? 2.3 : 1.9}
                     />
-                    <span>{item.label}</span>
+                    <span
+                      style={{
+                        color: isActive ? '#FFFFFF' : 'var(--color-neutral-800)',
+                        fontWeight: isActive ? 700 : 600,
+                        letterSpacing: '-0.01em',
+                      }}
+                    >
+                      {item.label}
+                    </span>
                   </div>
 
                   {item.badge && (

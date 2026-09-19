@@ -32,9 +32,9 @@ export const Button: React.FC<ButtonProps> = ({
         <span style={{ display: 'inline-block', width: 16, height: 16, border: '2px solid currentColor', borderRightColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
       ) : (
         <>
-          {icon && iconPosition === 'left' && <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>}
+          {icon && iconPosition === 'left' && <span style={{ display: 'flex', alignItems: 'center', color: 'inherit' }}>{icon}</span>}
           {children}
-          {icon && iconPosition === 'right' && <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>}
+          {icon && iconPosition === 'right' && <span style={{ display: 'flex', alignItems: 'center', color: 'inherit' }}>{icon}</span>}
         </>
       )}
     </button>

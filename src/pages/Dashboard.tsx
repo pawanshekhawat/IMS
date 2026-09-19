@@ -46,7 +46,7 @@ export const Dashboard: React.FC = () => {
       <Header
         title="Showroom Overview"
         subtitle="Garhwal Lights • Live Retail & Stock Dashboard"
-        quickActionLabel="+ New Bill"
+        quickActionLabel="New Bill"
         onQuickAction={() => navigate('/sales')}
         lowStockCount={stats ? stats.lowStockCount + stats.outOfStockCount : 0}
         onAlertClick={() => navigate('/inventory')}

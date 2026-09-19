@@ -153,7 +153,7 @@ export const Customers: React.FC = () => {
       <Header
         title="Customer Directory"
         subtitle="Manage regular clients, interior decorators, architects, and hotels"
-        quickActionLabel="+ Add Customer"
+        quickActionLabel="Add Customer"
         onQuickAction={() => {
           setCustomerToEdit(null);
           setIsModalOpen(true);

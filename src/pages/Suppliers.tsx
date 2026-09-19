@@ -158,7 +158,7 @@ export const Suppliers: React.FC = () => {
       <Header
         title="Suppliers & Vendors"
         subtitle="Manage manufacturers, wholesale distributors, and payment ledgers"
-        quickActionLabel="+ Add Supplier"
+        quickActionLabel="Add Supplier"
         onQuickAction={() => {
           setSupplierToEdit(null);
           setIsModalOpen(true);
