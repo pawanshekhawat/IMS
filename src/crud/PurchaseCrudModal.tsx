@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Select } from '../components/ui/Select';
@@ -33,6 +33,20 @@ export const PurchaseCrudModal: React.FC<PurchaseCrudModalProps> = ({
   const [itemQuantity, setItemQuantity] = useState(10);
   const [itemCostPrice, setItemCostPrice] = useState(products[0]?.costPrice || 0);
 
+  // Sync state when modal opens or products/suppliers change
+  useEffect(() => {
+    if (isOpen) {
+      if (suppliers.length > 0 && (!supplierId || !suppliers.some(s => s.id === supplierId))) {
+        setSupplierId(suppliers[0].id);
+      }
+      if (products.length > 0 && (!selectedProductId || !products.some(p => p.id === selectedProductId))) {
+        setSelectedProductId(products[0].id);
+        setItemCostPrice(products[0].costPrice || 0);
+      }
+      setError('');
+    }
+  }, [isOpen, suppliers, products]);
+
   const handleProductChange = (prodId: string) => {
     setSelectedProductId(prodId);
     const prod = products.find(p => p.id === prodId);
@@ -42,18 +56,24 @@ export const PurchaseCrudModal: React.FC<PurchaseCrudModalProps> = ({
   };
 
   const handleAddItem = () => {
-    const prod = products.find(p => p.id === selectedProductId);
-    if (!prod) return;
-    if (itemQuantity <= 0) {
-      setError('Item quantity must be greater than 0');
+    const targetProdId = selectedProductId || products[0]?.id;
+    const prod = products.find(p => p.id === targetProdId);
+    if (!prod) {
+      setError('Please select a product item from the catalog');
+      return;
+    }
+    if (!itemQuantity || itemQuantity <= 0) {
+      setError('Item order quantity must be greater than 0');
       return;
     }
 
+    const price = itemCostPrice !== undefined && itemCostPrice >= 0 ? itemCostPrice : (prod.costPrice || 0);
     const existingIndex = items.findIndex(i => i.productId === prod.id);
     if (existingIndex > -1) {
       const updated = [...items];
       updated[existingIndex].quantity += itemQuantity;
-      updated[existingIndex].total = updated[existingIndex].quantity * updated[existingIndex].costPrice;
+      updated[existingIndex].costPrice = price;
+      updated[existingIndex].total = updated[existingIndex].quantity * price;
       setItems(updated);
     } else {
       setItems([
@@ -61,10 +81,10 @@ export const PurchaseCrudModal: React.FC<PurchaseCrudModalProps> = ({
         {
           productId: prod.id,
           productName: prod.name,
-          costPrice: itemCostPrice,
+          costPrice: price,
           quantity: itemQuantity,
-          unit: prod.unit,
-          total: itemCostPrice * itemQuantity,
+          unit: prod.unit || 'pcs',
+          total: price * itemQuantity,
         }
       ]);
     }
@@ -82,7 +102,8 @@ export const PurchaseCrudModal: React.FC<PurchaseCrudModalProps> = ({
       setError('Please add at least one product item to the order');
       return;
     }
-    const sup = suppliers.find(s => s.id === supplierId);
+    const targetSupplierId = supplierId || suppliers[0]?.id;
+    const sup = suppliers.find(s => s.id === targetSupplierId);
     if (!sup) {
       setError('Please select a supplier');
       return;
@@ -153,7 +174,7 @@ export const PurchaseCrudModal: React.FC<PurchaseCrudModalProps> = ({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <Select
           label="Select Supplier *"
-          value={supplierId}
+          value={supplierId || (suppliers[0]?.id ?? '')}
           onChange={(e) => setSupplierId(e.target.value)}
           options={suppliers.map(s => ({ value: s.id, label: `${s.name} (${s.contactPerson})` }))}
         />
@@ -175,7 +196,7 @@ export const PurchaseCrudModal: React.FC<PurchaseCrudModalProps> = ({
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
             <Select
               label="Select Item"
-              value={selectedProductId}
+              value={selectedProductId || (products[0]?.id ?? '')}
               onChange={(e) => handleProductChange(e.target.value)}
               options={products.map(p => ({ value: p.id, label: `${p.name} (Cur: ${p.stockQuantity} ${p.unit})` }))}
             />
