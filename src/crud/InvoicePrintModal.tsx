@@ -19,6 +19,28 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
   if (!sale) return null;
 
+  const storeProfile = (() => {
+    try {
+      const stored = localStorage.getItem('store_profile');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.address && (parsed.address.includes('Dehradun') || parsed.address.includes('Rajpur Road'))) {
+          parsed.address = 'Shivam Heights, Ramlila Maidan, Tilak Nagar, Sikar, Rajasthan 332001';
+        }
+        return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {
+      name: 'GARHWAL LIGHTS',
+      tagline: 'Architectural & Decorative Lighting Showroom',
+      address: 'Shivam Heights, Ramlila Maidan, Tilak Nagar, Sikar, Rajasthan 332001',
+      gstin: '05AAACG1234F1Z8',
+      phone: '+91 98970 12345',
+    };
+  })();
+
   const handlePrint = () => {
     window.print();
   };
@@ -147,16 +169,16 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #064D3D', paddingBottom: '16px' }}>
               <div>
                 <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#064D3D', letterSpacing: '-0.02em', margin: 0 }}>
-                  GARHWAL LIGHTS
+                  {storeProfile.name ? storeProfile.name.toUpperCase() : 'GARHWAL LIGHTS'}
                 </h1>
                 <p style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563', margin: '2px 0 0 0' }}>
-                  Architectural & Decorative Lighting Showroom
+                  {storeProfile.tagline || 'Architectural & Decorative Lighting Showroom'}
                 </p>
                 <p style={{ fontSize: '11px', color: '#6B7280', margin: '2px 0 0 0' }}>
-                  14, Rajpur Road, Dehradun, Uttarakhand - 248001
+                  {storeProfile.address || 'Shivam Heights, Ramlila Maidan, Tilak Nagar, Sikar, Rajasthan 332001'}
                 </p>
                 <p style={{ fontSize: '11px', color: '#6B7280', margin: '2px 0 0 0' }}>
-                  GSTIN: 05AAACG9999P1Z3 | Phone: +91 98970 00123
+                  GSTIN: {storeProfile.gstin || '05AAACG1234F1Z8'} | Phone: {storeProfile.phone || '+91 98970 12345'}
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -282,12 +304,12 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                 <p style={{ fontWeight: 700, margin: '0 0 2px 0' }}>Terms & Conditions:</p>
                 <p style={{ margin: 0 }}>1. Goods once sold can only be exchanged within 7 days in original condition.</p>
                 <p style={{ margin: 0 }}>2. 1-2 Year Manufacturer Warranty on LED drivers, downlights & strip lights.</p>
-                <p style={{ margin: 0 }}>3. Subject to Dehradun Jurisdiction.</p>
+                <p style={{ margin: 0 }}>3. Subject to Sikar Jurisdiction.</p>
               </div>
 
               <div style={{ textAlign: 'center' }}>
                 <div style={{ width: '140px', height: '40px', borderBottom: '1px solid #111827', margin: '0 auto 4px auto' }} />
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>For Garhwal Lights</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>For {storeProfile.name || 'Garhwal Lights'}</span>
               </div>
             </div>
           </div>
@@ -304,9 +326,9 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
             boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
           }}>
             <div style={{ textAlign: 'center', marginBottom: '12px' }}>
-              <h2 style={{ fontSize: '17px', fontWeight: 900, margin: 0, color: '#000' }}>GARHWAL LIGHTS</h2>
-              <p style={{ margin: '2px 0', fontSize: '11px', color: '#374151' }}>Showroom - Dehradun</p>
-              <p style={{ margin: '2px 0', fontSize: '10px', color: '#4B5563' }}>Ph: +91 98970 00123</p>
+              <h2 style={{ fontSize: '17px', fontWeight: 900, margin: 0, color: '#000' }}>{storeProfile.name ? storeProfile.name.toUpperCase() : 'GARHWAL LIGHTS'}</h2>
+              <p style={{ margin: '2px 0', fontSize: '11px', color: '#374151' }}>Showroom - Sikar, Rajasthan</p>
+              <p style={{ margin: '2px 0', fontSize: '10px', color: '#4B5563' }}>Ph: {storeProfile.phone || '+91 98970 12345'}</p>
               <p style={{ margin: '6px 0 0 0', borderTop: '1px dashed #000', paddingTop: '6px', fontWeight: 700 }}>
                 Inv: {sale.invoiceNumber}
               </p>

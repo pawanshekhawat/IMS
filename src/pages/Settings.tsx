@@ -16,13 +16,30 @@ import { dataService } from '../services/dataService';
 export const Settings: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'latest' | 'available'>('idle');
   const [reseedLoading, setReseedLoading] = useState(false);
-  const [storeInfo, setStoreInfo] = useState({
+  const defaultStoreInfo = {
     name: 'Garhwal Lights - Retail & Showroom',
     tagline: 'Premium Architectural & Decorative Lighting',
     gstin: '05AAACG1234F1Z8',
     phone: '+91 98970 12345',
     email: 'contact@garhwallights.in',
-    address: 'Clock Tower / Rajpur Road, Dehradun, Uttarakhand - 248001',
+    address: 'Shivam Heights, Ramlila Maidan, Tilak Nagar, Sikar, Rajasthan 332001',
+  };
+
+  const [storeInfo, setStoreInfo] = useState(() => {
+    try {
+      const saved = localStorage.getItem('store_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.address && (parsed.address.includes('Dehradun') || parsed.address.includes('Rajpur Road'))) {
+          parsed.address = 'Shivam Heights, Ramlila Maidan, Tilak Nagar, Sikar, Rajasthan 332001';
+          localStorage.setItem('store_profile', JSON.stringify(parsed));
+        }
+        return { ...defaultStoreInfo, ...parsed };
+      }
+    } catch (e) {
+      // ignore
+    }
+    return defaultStoreInfo;
   });
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -35,6 +52,11 @@ export const Settings: React.FC = () => {
 
   const handleSaveStoreProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    try {
+      localStorage.setItem('store_profile', JSON.stringify(storeInfo));
+    } catch (err) {
+      console.error('Failed to save store profile to localStorage', err);
+    }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
   };
