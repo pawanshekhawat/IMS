@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Calendar, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Calendar, AlertCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { BusinessCalendarModal } from '../calendar/BusinessCalendarModal';
+import { dataService } from '../../services/dataService';
 
 interface HeaderProps {
   title: string;
@@ -10,7 +12,9 @@ interface HeaderProps {
   quickActionLabel?: string;
   onSearch?: (term: string) => void;
   lowStockCount?: number;
+  outOfStockCount?: number;
   onAlertClick?: () => void;
+  onOutOfStockClick?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,9 +23,13 @@ export const Header: React.FC<HeaderProps> = ({
   onQuickAction,
   quickActionLabel = 'New Bill',
   onSearch,
-  lowStockCount = 0,
+  lowStockCount,
+  outOfStockCount,
   onAlertClick,
+  onOutOfStockClick,
 }) => {
+  const navigate = useNavigate();
+  const [liveCounts, setLiveCounts] = useState<{ low: number; out: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -30,6 +38,17 @@ export const Header: React.FC<HeaderProps> = ({
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (lowStockCount === undefined && outOfStockCount === undefined) {
+      dataService.getDashboardStats().then(s => {
+        setLiveCounts({ low: s.lowStockCount, out: s.outOfStockCount });
+      }).catch(() => {});
+    }
+  }, [lowStockCount, outOfStockCount]);
+
+  const effectiveOutCount = outOfStockCount !== undefined ? outOfStockCount : (liveCounts?.out || 0);
+  const effectiveLowCount = lowStockCount !== undefined ? lowStockCount : (liveCounts?.low || 0);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
@@ -101,28 +120,55 @@ export const Header: React.FC<HeaderProps> = ({
           />
         </div>
 
-        {/* Low Stock Warning Pill */}
-        {lowStockCount > 0 && (
+        {/* Out of Stock Urgent Alert Pill */}
+        {effectiveOutCount > 0 && (
           <button
-            onClick={onAlertClick}
+            type="button"
+            onClick={onOutOfStockClick || (() => navigate('/inventory?filter=out'))}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
               padding: '6px 14px',
               borderRadius: '9999px',
-              backgroundColor: 'var(--color-warning-bg)',
-              color: 'var(--color-warning)',
+              backgroundColor: 'var(--color-danger-bg, #fee2e2)',
+              color: 'var(--color-danger, #b91c1c)',
+              border: '1px solid #fca5a5',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'transform 0.15s ease',
+            }}
+            title={`${effectiveOutCount} item${effectiveOutCount === 1 ? '' : 's'} completely out of stock`}
+          >
+            <AlertTriangle size={14} color="var(--color-danger, #b91c1c)" />
+            <span>{effectiveOutCount} Out of Stock</span>
+          </button>
+        )}
+
+        {/* Low Stock Warning Pill */}
+        {effectiveLowCount > 0 && (
+          <button
+            type="button"
+            onClick={onAlertClick || (() => navigate('/inventory?filter=low'))}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '9999px',
+              backgroundColor: 'var(--color-warning-bg, #fef3c7)',
+              color: 'var(--color-warning, #b45309)',
               border: '1px solid #fcd34d',
               fontSize: '12px',
               fontWeight: 700,
               cursor: 'pointer',
               transition: 'transform 0.15s ease',
             }}
-            title="Items needing restock"
+            title={`${effectiveLowCount} item${effectiveLowCount === 1 ? '' : 's'} running low on stock`}
           >
-            <AlertCircle size={14} />
-            <span>{lowStockCount} Low Stock</span>
+            <AlertCircle size={14} color="var(--color-warning, #b45309)" />
+            <span>{effectiveLowCount} Low Stock</span>
           </button>
         )}
 

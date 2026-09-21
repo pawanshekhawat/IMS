@@ -48,8 +48,10 @@ export const Dashboard: React.FC = () => {
         subtitle="Garhwal Lights • Live Retail & Stock Dashboard"
         quickActionLabel="New Bill"
         onQuickAction={() => navigate('/sales')}
-        lowStockCount={stats ? stats.lowStockCount + stats.outOfStockCount : 0}
-        onAlertClick={() => navigate('/inventory')}
+        lowStockCount={stats?.lowStockCount || 0}
+        outOfStockCount={stats?.outOfStockCount || 0}
+        onAlertClick={() => navigate('/inventory?filter=low')}
+        onOutOfStockClick={() => navigate('/inventory?filter=out')}
       />
 
       <div style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -79,9 +81,17 @@ export const Dashboard: React.FC = () => {
           <StatCard
             label="Restock Alerts"
             value={`${(stats?.lowStockCount || 0) + (stats?.outOfStockCount || 0)} Items`}
-            subtext={`${stats?.outOfStockCount || 0} completely out of stock`}
+            subtext={
+              (stats?.outOfStockCount || 0) > 0 && (stats?.lowStockCount || 0) > 0
+                ? `${stats?.outOfStockCount} out of stock • ${stats?.lowStockCount} low stock`
+                : (stats?.outOfStockCount || 0) > 0
+                ? `${stats?.outOfStockCount} completely out of stock`
+                : (stats?.lowStockCount || 0) > 0
+                ? `${stats?.lowStockCount} items running low`
+                : 'All items comfortably stocked'
+            }
             icon={<AlertTriangle size={20} />}
-            variant="warning"
+            variant={(stats?.outOfStockCount || 0) > 0 ? 'danger' : (stats?.lowStockCount || 0) > 0 ? 'warning' : 'neutral'}
           />
 
           <StatCard
@@ -158,7 +168,7 @@ export const Dashboard: React.FC = () => {
                 size="sm"
                 icon={<ArrowRight size={14} />}
                 iconPosition="right"
-                onClick={() => navigate('/inventory')}
+                onClick={() => navigate('/inventory?filter=' + ((stats?.outOfStockCount || 0) > 0 ? 'out' : 'low'))}
               >
                 View All
               </Button>
@@ -200,8 +210,13 @@ export const Dashboard: React.FC = () => {
                         }}>
                           {p.stockQuantity} {p.unit}
                         </span>
-                        <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', display: 'block' }}>
-                          Min: {p.minStockLevel}
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: p.stockQuantity === 0 ? 'var(--color-danger)' : 'var(--color-warning)',
+                          display: 'block',
+                        }}>
+                          {p.stockQuantity === 0 ? 'Out of Stock' : `Min: ${p.minStockLevel}`}
                         </span>
                       </div>
                       <Button

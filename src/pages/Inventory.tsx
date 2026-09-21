@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Warehouse, 
   ArrowUpRight, 
@@ -15,12 +16,24 @@ import type { Product, StockMovement } from '../types';
 import { StockAdjustmentModal } from '../crud/StockAdjustmentModal';
 
 export const Inventory: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterQuery = searchParams.get('filter');
+  const initialMode: 'ALL' | 'LOW' | 'OUT' = 
+    filterQuery === 'out' ? 'OUT' : filterQuery === 'low' ? 'LOW' : 'ALL';
+
   const [activeView, setActiveView] = useState<'levels' | 'movements'>('levels');
   const [products, setProducts] = useState<Product[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<'ALL' | 'LOW' | 'OUT'>('ALL');
+  const [filterMode, setFilterMode] = useState<'ALL' | 'LOW' | 'OUT'>(initialMode);
   const [selectedProductForAdjust, setSelectedProductForAdjust] = useState<Product | null>(null);
+
+  useEffect(() => {
+    const f = searchParams.get('filter');
+    if (f === 'out') setFilterMode('OUT');
+    else if (f === 'low') setFilterMode('LOW');
+    else if (f === 'all') setFilterMode('ALL');
+  }, [searchParams]);
 
   const loadData = async () => {
     const [pList, mList] = await Promise.all([
@@ -34,6 +47,20 @@ export const Inventory: React.FC = () => {
   useEffect(() => {
     loadData();
   }, []);
+
+  const outCount = products.filter(p => p.stockQuantity === 0).length;
+  const lowCount = products.filter(p => p.stockQuantity <= p.minStockLevel && p.stockQuantity > 0).length;
+
+  const handleFilterSelect = (mode: 'ALL' | 'LOW' | 'OUT') => {
+    setFilterMode(mode);
+    if (mode === 'ALL') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('filter');
+      setSearchParams(next);
+    } else {
+      setSearchParams({ ...Object.fromEntries(searchParams.entries()), filter: mode.toLowerCase() });
+    }
+  };
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = 
@@ -204,6 +231,10 @@ export const Inventory: React.FC = () => {
           }
         }}
         onSearch={setSearchQuery}
+        outOfStockCount={outCount}
+        lowStockCount={lowCount}
+        onOutOfStockClick={() => handleFilterSelect('OUT')}
+        onAlertClick={() => handleFilterSelect('LOW')}
       />
 
       <div style={{
@@ -272,7 +303,8 @@ export const Inventory: React.FC = () => {
           {activeView === 'levels' && (
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
-                onClick={() => setFilterMode('ALL')}
+                type="button"
+                onClick={() => handleFilterSelect('ALL')}
                 style={{
                   padding: '6px 14px',
                   borderRadius: '9999px',
@@ -287,7 +319,8 @@ export const Inventory: React.FC = () => {
                 All ({products.length})
               </button>
               <button
-                onClick={() => setFilterMode('LOW')}
+                type="button"
+                onClick={() => handleFilterSelect('LOW')}
                 style={{
                   padding: '6px 14px',
                   borderRadius: '9999px',
@@ -299,10 +332,11 @@ export const Inventory: React.FC = () => {
                   cursor: 'pointer',
                 }}
               >
-                Low Stock
+                Low Stock ({lowCount})
               </button>
               <button
-                onClick={() => setFilterMode('OUT')}
+                type="button"
+                onClick={() => handleFilterSelect('OUT')}
                 style={{
                   padding: '6px 14px',
                   borderRadius: '9999px',
@@ -314,7 +348,7 @@ export const Inventory: React.FC = () => {
                   cursor: 'pointer',
                 }}
               >
-                Out of Stock
+                Out of Stock ({outCount})
               </button>
             </div>
           )}
