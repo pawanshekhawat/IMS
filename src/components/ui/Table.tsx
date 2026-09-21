@@ -99,6 +99,7 @@ export function Table<T>({
                       color: 'var(--color-neutral-900)',
                       textAlign: col.align || 'left',
                       verticalAlign: 'middle',
+                      width: col.width,
                     }}
                   >
                     {typeof col.accessor === 'function'

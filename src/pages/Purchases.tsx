@@ -66,46 +66,66 @@ export const Purchases: React.FC = () => {
     p.supplierName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const [y, m, d] = dateStr.split('-');
+      if (!y || !m || !d) return dateStr;
+      const date = new Date(Number(y), Number(m) - 1, Number(d));
+      return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const columns: TableColumn<Purchase>[] = [
     {
       header: 'PO Number & Date',
+      width: '170px',
       accessor: (p) => (
-        <div>
+        <div style={{ whiteSpace: 'nowrap' }}>
           <span style={{ fontWeight: 800, color: 'var(--color-primary-800)', fontSize: '13px' }}>
             {p.poNumber}
           </span>
-          <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', display: 'block' }}>
-            Ordered: {p.orderDate}
+          <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', display: 'block', marginTop: '2px' }}>
+            Ordered: {formatDate(p.orderDate)}
           </span>
         </div>
       ),
     },
     {
       header: 'Vendor / Supplier',
+      width: '200px',
       accessor: (p) => (
-        <span style={{ fontWeight: 700, color: 'var(--color-neutral-900)', fontSize: '13px' }}>
+        <div style={{ fontWeight: 700, color: 'var(--color-neutral-900)', fontSize: '13px', lineHeight: 1.3 }}>
           {p.supplierName}
-        </span>
+        </div>
       ),
     },
     {
       header: 'Items Ordered',
       accessor: (p) => (
         <div>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-800)' }}>
-            {p.items.length} product lines
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-neutral-800)' }}>
+            {p.items.length} {p.items.length === 1 ? 'product line' : 'product lines'}
           </span>
-          <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
-            {p.items.map(i => `${i.productName} (x${i.quantity})`).slice(0, 2).join(', ')}
-            {p.items.length > 2 && '...'}
+          <div style={{
+            fontSize: '11px',
+            color: 'var(--color-neutral-500)',
+            marginTop: '2px',
+            lineHeight: 1.3,
+            maxWidth: '320px',
+          }}>
+            {p.items.map(i => `${i.productName} (x${i.quantity})`).join(', ')}
           </div>
         </div>
       ),
     },
     {
       header: 'Total Value',
+      width: '130px',
       accessor: (p) => (
-        <span style={{ fontWeight: 800, color: 'var(--color-neutral-900)', fontSize: '14px' }}>
+        <span style={{ fontWeight: 800, color: 'var(--color-neutral-900)', fontSize: '14px', whiteSpace: 'nowrap' }}>
           ₹{p.totalAmount.toLocaleString('en-IN')}
         </span>
       ),
@@ -113,21 +133,39 @@ export const Purchases: React.FC = () => {
     },
     {
       header: 'Order Status',
-      accessor: (p) => {
-        if (p.status === 'Received') return <Badge variant="success">Stock Received</Badge>;
-        if (p.status === 'Ordered') return <Badge variant="warning">Awaiting Delivery</Badge>;
-        return <Badge variant="neutral">{p.status}</Badge>;
-      },
+      width: '150px',
+      accessor: (p) => (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', whiteSpace: 'nowrap' }}>
+          {p.status === 'Received' ? (
+            <>
+              <Badge variant="success">Stock Received</Badge>
+              {p.receivedDate && (
+                <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', fontWeight: 500 }}>
+                  Rcvd: {formatDate(p.receivedDate)}
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <Badge variant="warning">Awaiting Delivery</Badge>
+              <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', fontWeight: 500 }}>
+                In Transit
+              </span>
+            </>
+          )}
+        </div>
+      ),
       align: 'center',
     },
     {
       header: 'Payment',
+      width: '130px',
       accessor: (p) => (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <button
             type="button"
             onClick={() => handleUpdatePayment(p, p.paymentStatus === 'Paid' ? 'Pending' : 'Paid')}
-            title={p.paymentStatus === 'Paid' ? 'Click to revert to Pending' : 'Click to mark as Paid'}
+            title={p.paymentStatus === 'Paid' ? 'Click to revert payment status' : 'Click to record payment made'}
             style={{
               background: 'none',
               border: 'none',
@@ -146,8 +184,9 @@ export const Purchases: React.FC = () => {
     },
     {
       header: 'Actions',
+      width: '160px',
       accessor: (p) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', whiteSpace: 'nowrap' }}>
           {p.status !== 'Received' ? (
             <Button
               variant="tertiary"
@@ -158,13 +197,7 @@ export const Purchases: React.FC = () => {
             >
               Inward Stock
             </Button>
-          ) : (
-            <span style={{ fontSize: '12px', color: 'var(--color-success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <CheckCircle size={14} /> Received ({p.receivedDate})
-            </span>
-          )}
-
-          {p.paymentStatus !== 'Paid' ? (
+          ) : p.paymentStatus !== 'Paid' ? (
             <Button
               variant="primary"
               size="sm"
@@ -176,8 +209,15 @@ export const Purchases: React.FC = () => {
               Mark Paid
             </Button>
           ) : (
-            <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', fontWeight: 600 }}>
-              (Settled)
+            <span style={{
+              fontSize: '12px',
+              color: 'var(--color-success)',
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}>
+              <CheckCircle size={15} /> Settled
             </span>
           )}
         </div>
