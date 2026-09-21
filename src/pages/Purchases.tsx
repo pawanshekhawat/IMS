@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, PackageCheck } from 'lucide-react';
+import { CheckCircle, PackageCheck, CreditCard } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -15,6 +15,7 @@ export const Purchases: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
 
   const loadData = async () => {
     const [pList, sList, prList] = await Promise.all([
@@ -41,6 +42,21 @@ export const Purchases: React.FC = () => {
         alert(err.message || 'Failed to receive stock');
       } finally {
         setReceivingId(null);
+      }
+    }
+  };
+
+  const handleUpdatePayment = async (po: Purchase, status: 'Paid' | 'Pending') => {
+    const actionLabel = status === 'Paid' ? 'mark as Paid' : 'revert to Pending';
+    if (window.confirm(`Are you sure you want to ${actionLabel} payment of ₹${po.totalAmount.toLocaleString('en-IN')} for ${po.poNumber} (${po.supplierName})?`)) {
+      setPayingId(po.id);
+      try {
+        await dataService.updatePurchasePaymentStatus(po.id, status);
+        await loadData();
+      } catch (err: any) {
+        alert(err.message || 'Failed to update payment status');
+      } finally {
+        setPayingId(null);
       }
     }
   };
@@ -107,16 +123,31 @@ export const Purchases: React.FC = () => {
     {
       header: 'Payment',
       accessor: (p) => (
-        <Badge variant={p.paymentStatus === 'Paid' ? 'success' : 'neutral'}>
-          {p.paymentStatus}
-        </Badge>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button
+            type="button"
+            onClick={() => handleUpdatePayment(p, p.paymentStatus === 'Paid' ? 'Pending' : 'Paid')}
+            title={p.paymentStatus === 'Paid' ? 'Click to revert to Pending' : 'Click to mark as Paid'}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              display: 'inline-flex',
+            }}
+          >
+            <Badge variant={p.paymentStatus === 'Paid' ? 'success' : 'warning'}>
+              {p.paymentStatus === 'Paid' ? '✓ Paid' : 'Pending'}
+            </Badge>
+          </button>
+        </div>
       ),
       align: 'center',
     },
     {
       header: 'Actions',
       accessor: (p) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
           {p.status !== 'Received' ? (
             <Button
               variant="tertiary"
@@ -130,6 +161,23 @@ export const Purchases: React.FC = () => {
           ) : (
             <span style={{ fontSize: '12px', color: 'var(--color-success)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
               <CheckCircle size={14} /> Received ({p.receivedDate})
+            </span>
+          )}
+
+          {p.paymentStatus !== 'Paid' ? (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<CreditCard size={14} color="#FFFFFF" />}
+              isLoading={payingId === p.id}
+              onClick={() => handleUpdatePayment(p, 'Paid')}
+              title="Record payment made to supplier"
+            >
+              Mark Paid
+            </Button>
+          ) : (
+            <span style={{ fontSize: '11px', color: 'var(--color-neutral-500)', fontWeight: 600 }}>
+              (Settled)
             </span>
           )}
         </div>

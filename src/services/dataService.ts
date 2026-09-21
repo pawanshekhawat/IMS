@@ -40,6 +40,7 @@ export interface IDataService {
   getPurchases(): Promise<Purchase[]>;
   createPurchase(purchaseData: Omit<Purchase, 'id' | 'createdAt' | 'poNumber' | 'status'>): Promise<Purchase>;
   receivePurchase(id: string): Promise<Purchase>;
+  updatePurchasePaymentStatus(id: string, paymentStatus: 'Paid' | 'Pending' | 'Partial'): Promise<Purchase>;
 
   // Expenses
   getExpenses(): Promise<Expense[]>;
@@ -308,6 +309,15 @@ class LocalDataServiceImpl implements IDataService {
       }
     }
 
+    return purchase;
+  }
+
+  async updatePurchasePaymentStatus(id: string, paymentStatus: 'Paid' | 'Pending' | 'Partial'): Promise<Purchase> {
+    await this.ensureInit();
+    const purchase = await db.purchases.get(id);
+    if (!purchase) throw new Error('Purchase order not found');
+    purchase.paymentStatus = paymentStatus;
+    await db.purchases.put(purchase);
     return purchase;
   }
 
