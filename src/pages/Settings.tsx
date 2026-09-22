@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { 
   RefreshCw, 
   CheckCircle, 
-  RotateCcw,
   Store,
   Download,
   AlertCircle,
@@ -17,7 +16,6 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
 import { updateService, type UpdateInfo } from '../services/updateService';
 import { getSupabaseCredentials, saveSupabaseCredentials, isSupabaseConfigured, getSupabase } from '../services/supabaseClient';
@@ -27,7 +25,6 @@ export const Settings: React.FC = () => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
-  const [reseedLoading, setReseedLoading] = useState(false);
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
@@ -182,23 +179,11 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleResetData = async () => {
-    if (window.confirm('Clear all local data and reset showroom inventory, sales, and purchases to 0?')) {
-      setReseedLoading(true);
-      await dataService.resetToSampleData();
-      setReseedLoading(false);
-      alert('All showroom tables reset to clean 0!');
-      window.location.reload();
-    }
-  };
-
   return (
     <>
       <Header
         title="App Settings & System Controls"
         subtitle="OTA desktop updates, showroom store profile, and database management"
-        quickActionLabel="Reset Data to 0"
-        onQuickAction={handleResetData}
       />
 
       <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -668,17 +653,6 @@ export const Settings: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
-                <Button
-                  variant="outlined"
-                  size="sm"
-                  icon={<RotateCcw size={13} />}
-                  onClick={handleResetData}
-                  isLoading={reseedLoading}
-                  title="Clear all stored data to 0"
-                >
-                  Clear All Data to 0
-                </Button>
-
                 <Button
                   variant="primary"
                   size="sm"

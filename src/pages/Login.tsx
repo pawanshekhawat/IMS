@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
 import { Button } from '../components/ui/Button';
+import { AdminWelcomeScreen } from '../components/auth/AdminWelcomeScreen';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +15,8 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeAdminName, setWelcomeAdminName] = useState('Himanshu Choudhary');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +34,11 @@ export const Login: React.FC = () => {
         // Direct to appropriate starting page based on username/role
         const cleanUser = username.trim().toLowerCase();
         if (cleanUser === 'admin') {
-          navigate('/');
+          const active = authService.getActiveSession();
+          if (active?.displayName) {
+            setWelcomeAdminName(active.displayName);
+          }
+          setShowWelcome(true);
         } else {
           navigate('/sales');
         }
@@ -43,6 +51,15 @@ export const Login: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (showWelcome) {
+    return (
+      <AdminWelcomeScreen
+        adminName={welcomeAdminName}
+        onComplete={() => navigate('/')}
+      />
+    );
+  }
 
   return (
     <div style={{
@@ -66,29 +83,46 @@ export const Login: React.FC = () => {
       }}>
         {/* Top Decorative Brand Bar */}
         <div style={{
-          backgroundColor: 'var(--color-primary-800)',
+          background: 'linear-gradient(145deg, #063729 0%, #0B4F3C 100%)',
           padding: '28px 24px 22px',
-          color: '#FFFFFF',
           textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
         }}>
-          <img
-            src="/garhwal-lights-logo-trns.png"
-            alt="Garhwal Lights"
-            style={{
-              height: '72px',
-              maxWidth: '180px',
-              objectFit: 'contain',
-              marginBottom: '10px',
-              filter: 'drop-shadow(0 4px 10px rgba(0, 0, 0, 0.25))',
-            }}
-          />
-          <h1 style={{ fontSize: '20px', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
-            Garhwal Lights
-          </h1>
-          <p style={{ fontSize: '12px', color: 'var(--color-primary-100)', marginTop: '4px', margin: '4px 0 0' }}>
+          {/* Elevated Crisp White Container to display the logo at full contrast */}
+          <div style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: '16px',
+            padding: '12px 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 24px -4px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.2)',
+            marginBottom: '12px',
+            width: '85%',
+            maxWidth: '280px',
+            boxSizing: 'border-box',
+          }}>
+            <img
+              src="/garhwal-lights-logo-landscape-trns.png"
+              alt="Garhwal Lights"
+              style={{
+                width: '100%',
+                maxHeight: '56px',
+                objectFit: 'contain',
+                display: 'block',
+              }}
+            />
+          </div>
+
+          <p style={{
+            fontSize: '12px',
+            color: '#A7F3D0',
+            fontWeight: 600,
+            letterSpacing: '0.02em',
+            margin: 0,
+          }}>
             Retail Showroom • Shivam Heights, Sikar
           </p>
         </div>
