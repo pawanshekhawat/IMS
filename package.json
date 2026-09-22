@@ -1,11 +1,12 @@
 {
   "name": "store-management",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:desktop": "tauri build --bundles nsis",
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri"
