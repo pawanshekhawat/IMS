@@ -4,6 +4,7 @@ import { Search, Plus, Calendar, AlertCircle, AlertTriangle } from 'lucide-react
 import { Button } from '../ui/Button';
 import { BusinessCalendarModal } from '../calendar/BusinessCalendarModal';
 import { dataService } from '../../services/dataService';
+import { useAuth } from '../../context/AuthContext';
 
 interface HeaderProps {
   title: string;
@@ -29,6 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOutOfStockClick,
 }) => {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
   const [liveCounts, setLiveCounts] = useState<{ low: number; out: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -41,11 +43,17 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     if (lowStockCount === undefined && outOfStockCount === undefined) {
-      dataService.getDashboardStats().then(s => {
-        setLiveCounts({ low: s.lowStockCount, out: s.outOfStockCount });
-      }).catch(() => {});
+      if (isAdmin) {
+        dataService.getDashboardStats().then(s => {
+          setLiveCounts({ low: s.lowStockCount, out: s.outOfStockCount });
+        }).catch(() => {});
+      } else {
+        dataService.getStockAlertCounts().then(counts => {
+          setLiveCounts(counts);
+        }).catch(() => {});
+      }
     }
-  }, [lowStockCount, outOfStockCount]);
+  }, [lowStockCount, outOfStockCount, isAdmin]);
 
   const effectiveOutCount = outOfStockCount !== undefined ? outOfStockCount : (liveCounts?.out || 0);
   const effectiveLowCount = lowStockCount !== undefined ? lowStockCount : (liveCounts?.low || 0);
@@ -172,41 +180,65 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Date & Time Button (Click to open Business Calendar) */}
-        <button
-          type="button"
-          onClick={() => setIsCalendarOpen(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '7px 16px',
-            borderRadius: '9999px',
-            backgroundColor: 'var(--color-neutral-200)',
-            border: '1px solid var(--color-neutral-300)',
-            fontSize: '12px',
-            fontWeight: 600,
-            color: 'var(--color-neutral-800)',
-            cursor: 'pointer',
-            flexShrink: 0,
-            whiteSpace: 'nowrap',
-            transition: 'all 0.15s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--color-primary-50)';
-            e.currentTarget.style.borderColor = 'var(--color-primary-300)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--color-neutral-200)';
-            e.currentTarget.style.borderColor = 'var(--color-neutral-300)';
-          }}
-          title="Click to view Monthly Financial Calendar & Daily Profits"
-        >
-          <Calendar size={14} color="var(--color-primary-800)" />
-          <span>{formattedDate}</span>
-          <span style={{ color: 'var(--color-neutral-400)' }}>•</span>
-          <span style={{ color: 'var(--color-neutral-900)', fontWeight: 700 }}>{formattedTime}</span>
-        </button>
+        {/* Date & Time Display (Calendar restricted strictly to Admin) */}
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => setIsCalendarOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '7px 16px',
+              borderRadius: '9999px',
+              backgroundColor: 'var(--color-neutral-200)',
+              border: '1px solid var(--color-neutral-300)',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--color-neutral-800)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--color-primary-50)';
+              e.currentTarget.style.borderColor = 'var(--color-primary-300)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--color-neutral-200)';
+              e.currentTarget.style.borderColor = 'var(--color-neutral-300)';
+            }}
+            title="Click to view Monthly Financial Calendar & Daily Profits"
+          >
+            <Calendar size={14} color="var(--color-primary-800)" />
+            <span>{formattedDate}</span>
+            <span style={{ color: 'var(--color-neutral-400)' }}>•</span>
+            <span style={{ color: 'var(--color-neutral-900)', fontWeight: 700 }}>{formattedTime}</span>
+          </button>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '7px 16px',
+              borderRadius: '9999px',
+              backgroundColor: 'var(--color-neutral-200)',
+              border: '1px solid var(--color-neutral-300)',
+              fontSize: '12px',
+              fontWeight: 600,
+              color: 'var(--color-neutral-700)',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
+              userSelect: 'none',
+            }}
+          >
+            <span>{formattedDate}</span>
+            <span style={{ color: 'var(--color-neutral-400)' }}>•</span>
+            <span style={{ color: 'var(--color-neutral-900)', fontWeight: 700 }}>{formattedTime}</span>
+          </div>
+        )}
 
         {/* Main CTA with white plus icon */}
         {onQuickAction && (
@@ -223,11 +255,13 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      {/* Monthly Business Calendar Modal */}
-      <BusinessCalendarModal
-        isOpen={isCalendarOpen}
-        onClose={() => setIsCalendarOpen(false)}
-      />
+      {/* Monthly Business Calendar Modal - Strictly Admin Only */}
+      {isAdmin && (
+        <BusinessCalendarModal
+          isOpen={isCalendarOpen}
+          onClose={() => setIsCalendarOpen(false)}
+        />
+      )}
     </header>
   );
 };

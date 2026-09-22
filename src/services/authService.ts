@@ -11,7 +11,7 @@ const getEnvDefaultAccounts = (): UserAccount[] => [
     id: 'user_admin_01',
     username: (import.meta.env.VITE_ADMIN_ID || 'admin').trim().toLowerCase(),
     passwordHash: (import.meta.env.VITE_ADMIN_PASSWORD || 'admin123').trim(),
-    displayName: 'Pawan Shekhawat (Owner)',
+    displayName: (import.meta.env.VITE_ADMIN_NAME || '(Owner)').trim(),
     role: 'admin',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
@@ -33,18 +33,32 @@ class AuthService {
       if (data) {
         const accounts: UserAccount[] = JSON.parse(data);
         if (Array.isArray(accounts) && accounts.length > 0) {
-          // Merge with any env overrides if usernames match
-          return accounts.map(acc => {
+          let hasChanges = false;
+          // Merge with any env overrides if usernames match, migrate legacy names
+          const migrated = accounts.map(acc => {
             const matchedEnv = defaults.find(d => d.role === acc.role);
+            let updatedDisplayName = acc.displayName;
+            if (updatedDisplayName && updatedDisplayName.toLowerCase().includes('pawan')) {
+              updatedDisplayName = defaults.find(d => d.role === 'admin')?.displayName || 'Himanshu Choudhary (Owner)';
+              hasChanges = true;
+            }
             if (matchedEnv) {
               return {
                 ...acc,
                 username: acc.username || matchedEnv.username,
                 passwordHash: acc.passwordHash || matchedEnv.passwordHash,
+                displayName: updatedDisplayName || matchedEnv.displayName,
               };
             }
-            return acc;
+            return {
+              ...acc,
+              displayName: updatedDisplayName || acc.displayName,
+            };
           });
+          if (hasChanges) {
+            this.saveAccounts(migrated);
+          }
+          return migrated;
         }
       }
     } catch {
@@ -91,8 +105,55 @@ class AuthService {
     return true;
   }
 
+  public async updateDisplayName(username: string, newDisplayName: string): Promise<boolean> {
+    const cleanUsername = username.trim().toLowerCase();
+    const cleanName = newDisplayName.trim();
+    if (!cleanName) return false;
+
+    const accounts = this.getStoredAccounts();
+    const target = accounts.find(a => a.username.toLowerCase() === cleanUsername);
+    if (!target) return false;
+
+    target.displayName = cleanName;
+    this.saveAccounts(accounts);
+
+    // Also update active session if it matches
+    const active = this.getActiveSession();
+    if (active && active.username.toLowerCase() === cleanUsername) {
+      active.displayName = cleanName;
+      if (active.role === 'staff') {
+        try {
+          localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(active));
+        } catch {
+          // ignore
+        }
+      } else {
+        try {
+          sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(active));
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Also update in Supabase database if configured
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase
+          .from('app_users')
+          .update({ display_name: cleanName })
+          .eq('username', cleanUsername);
+      } catch (err) {
+        console.warn('Could not sync name update to Supabase app_users table:', err);
+      }
+    }
+
+    return true;
+  }
+
   public async login(
-    username: string, 
+    username: string,
     password: string
   ): Promise<{ success: boolean; session?: UserSession; error?: string }> {
     const cleanUsername = username.trim().toLowerCase();
@@ -174,7 +235,12 @@ class AuthService {
     try {
       const adminData = sessionStorage.getItem(ADMIN_SESSION_KEY);
       if (adminData) {
-        return JSON.parse(adminData) as UserSession;
+        const session = JSON.parse(adminData) as UserSession;
+        if (session.displayName && session.displayName.toLowerCase().includes('pawan')) {
+          session.displayName = 'Himanshu Choudhary (Owner)';
+          sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+        }
+        return session;
       }
     } catch {
       // ignore

@@ -10,6 +10,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  updateDisplayName: (newName: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +42,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
+  const updateDisplayName = async (newName: string): Promise<boolean> => {
+    const targetUsername = user?.username || 'admin';
+    const ok = await authService.updateDisplayName(targetUsername, newName);
+    if (ok) {
+      const active = authService.getActiveSession();
+      if (active) {
+        setUser({ ...active });
+      }
+      return true;
+    }
+    return false;
+  };
+
   const role = user?.role || null;
   const isAdmin = role === 'admin';
   const isStaff = role === 'staff';
@@ -55,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         logout,
+        updateDisplayName,
       }}
     >
       {children}

@@ -51,8 +51,9 @@ export interface IDataService {
   getStockMovements(): Promise<StockMovement[]>;
   adjustStock(productId: string, quantityChange: number, type: 'IN' | 'OUT' | 'ADJUSTMENT' | 'DAMAGE', reason: string): Promise<void>;
 
-  // Stats
+  // Stats & Stock Alerts
   getDashboardStats(): Promise<DashboardStats>;
+  getStockAlertCounts(): Promise<{ low: number; out: number }>;
   resetToSampleData(): Promise<void>;
 }
 
@@ -75,6 +76,24 @@ class SupabaseDataServiceImpl implements IDataService {
   private ensureAuthenticated(): void {
     if (!authService.isAuthenticated()) {
       throw new Error('Unauthorized: An active showroom login session is required to access data.');
+    }
+  }
+
+  private getActiveRole(): 'admin' | 'staff' | null {
+    const session = authService.getActiveSession();
+    return session?.role || null;
+  }
+
+  /**
+   * Strict Code-Level Security Gate:
+   * Blocks non-admin callers (such as Staff or unauthenticated calls) from viewing
+   * or modifying sensitive business records: Expenses, Purchases, Suppliers, Profit Margins.
+   */
+  private ensureAdminRole(actionDescription: string): void {
+    this.ensureAuthenticated();
+    const role = this.getActiveRole();
+    if (role !== 'admin') {
+      throw new Error(`Access Denied: Only showroom administrators are authorized to ${actionDescription}.`);
     }
   }
 
@@ -102,6 +121,7 @@ class SupabaseDataServiceImpl implements IDataService {
   async getProducts(): Promise<Product[]> {
     this.ensureAuthenticated();
     const supabase = getSupabase();
+    let rawList: Product[] = [];
 
     if (supabase) {
       const { data, error } = await supabase
@@ -111,18 +131,29 @@ class SupabaseDataServiceImpl implements IDataService {
 
       if (error) {
         console.error('Supabase getProducts error:', error);
-        return this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
+        rawList = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
+      } else {
+        rawList = (data || []).map(p => this.mapProductFromDb(p));
       }
-
-      return (data || []).map(p => this.mapProductFromDb(p));
+    } else {
+      rawList = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
     }
 
-    return this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
+    // Role-based data protection: Redact cost price (wholesale purchase costs) from Staff
+    if (this.getActiveRole() === 'staff') {
+      return rawList.map(p => ({
+        ...p,
+        costPrice: 0,
+      }));
+    }
+
+    return rawList;
   }
 
   async getProductById(id: string): Promise<Product | undefined> {
     this.ensureAuthenticated();
     const supabase = getSupabase();
+    let prod: Product | undefined;
 
     if (supabase) {
       const { data, error } = await supabase
@@ -132,12 +163,19 @@ class SupabaseDataServiceImpl implements IDataService {
         .maybeSingle();
 
       if (!error && data) {
-        return this.mapProductFromDb(data);
+        prod = this.mapProductFromDb(data);
       }
     }
 
-    const list = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
-    return list.find(p => p.id === id);
+    if (!prod) {
+      const list = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
+      prod = list.find(p => p.id === id);
+    }
+
+    if (prod && this.getActiveRole() === 'staff') {
+      return { ...prod, costPrice: 0 };
+    }
+    return prod;
   }
 
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Promise<Product> {
@@ -287,10 +325,10 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // SUPPLIERS
+  // SUPPLIERS (Admin-Only)
   // ==========================================
   async getSuppliers(): Promise<Supplier[]> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('view supplier contacts and trade balances');
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('suppliers').select('*').order('created_at', { ascending: false });
@@ -302,7 +340,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async createSupplier(data: Omit<Supplier, 'id' | 'createdAt' | 'balanceDue'>): Promise<Supplier> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('create suppliers');
     const supplier: Supplier = {
       ...data,
       id: `supp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -322,7 +360,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async updateSupplier(id: string, updates: Partial<Supplier>): Promise<Supplier> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('update supplier profiles');
     const list = this.getLocalList<Supplier>(STORAGE_KEYS.SUPPLIERS);
     const existing = list.find(s => s.id === id);
     if (!existing) throw new Error('Supplier not found');
@@ -340,7 +378,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async deleteSupplier(id: string): Promise<void> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('delete suppliers');
     const supabase = getSupabase();
     if (supabase) {
       await supabase.from('suppliers').delete().eq('id', id);
@@ -428,10 +466,10 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // PURCHASES (INWARD STOCK)
+  // PURCHASES (INWARD STOCK - Admin Only)
   // ==========================================
   async getPurchases(): Promise<Purchase[]> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('view supplier purchase orders');
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('purchases').select('*').order('created_at', { ascending: false });
@@ -443,7 +481,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async createPurchase(data: Omit<Purchase, 'id' | 'createdAt' | 'poNumber' | 'status'>): Promise<Purchase> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('create supplier purchase orders');
     const now = new Date().toISOString();
     const poNumber = `PO-${Date.now().toString().slice(-6)}`;
     const purchase: Purchase = {
@@ -467,7 +505,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async receivePurchase(id: string): Promise<Purchase> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('receive inward purchase orders');
     const purchases = await this.getPurchases();
     const purchase = purchases.find(p => p.id === id);
     if (!purchase) throw new Error('Purchase order not found');
@@ -507,7 +545,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async updatePurchasePaymentStatus(id: string, paymentStatus: 'Paid' | 'Pending' | 'Partial'): Promise<Purchase> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('update purchase order payment statuses');
     const purchases = await this.getPurchases();
     const purchase = purchases.find(p => p.id === id);
     if (!purchase) throw new Error('Purchase order not found');
@@ -527,10 +565,10 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // EXPENSES
+  // EXPENSES (Admin Only)
   // ==========================================
   async getExpenses(): Promise<Expense[]> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('view showroom expenses');
     const supabase = getSupabase();
     if (supabase) {
       const { data, error } = await supabase.from('expenses').select('*').order('created_at', { ascending: false });
@@ -542,7 +580,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async createExpense(data: Omit<Expense, 'id' | 'createdAt' | 'expenseNumber'>): Promise<Expense> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('record showroom expenses');
     const now = new Date().toISOString();
     const expenseNumber = `EXP-${Date.now().toString().slice(-6)}`;
     const expense: Expense = {
@@ -565,7 +603,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   async deleteExpense(id: string): Promise<void> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('delete showroom expenses');
     const supabase = getSupabase();
     if (supabase) {
       await supabase.from('expenses').delete().eq('id', id);
@@ -629,10 +667,10 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // DASHBOARD STATS (Clean 0 Baseline)
+  // DASHBOARD STATS (Admin Only)
   // ==========================================
   async getDashboardStats(): Promise<DashboardStats> {
-    this.ensureAuthenticated();
+    this.ensureAdminRole('view showroom financial dashboard and net profit metrics');
     const products = await this.getProducts();
     const sales = await this.getSales();
     const expenses = await this.getExpenses();
@@ -661,6 +699,14 @@ class SupabaseDataServiceImpl implements IDataService {
       monthlySalesTotal,
       monthlyExpensesTotal,
     };
+  }
+
+  async getStockAlertCounts(): Promise<{ low: number; out: number }> {
+    this.ensureAuthenticated();
+    const products = await this.getProducts();
+    const outCount = products.filter(p => p.stockQuantity <= 0).length;
+    const lowCount = products.filter(p => p.stockQuantity > 0 && p.stockQuantity <= p.minStockLevel).length;
+    return { low: lowCount, out: outCount };
   }
 
   async resetToSampleData(): Promise<void> {

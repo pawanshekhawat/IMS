@@ -14,6 +14,7 @@ import { Inventory } from './pages/Inventory';
 import { Expenses } from './pages/Expenses';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
+import { AppUpdates } from './pages/AppUpdates';
 
 import { AutoUpdateManager } from './components/common/AutoUpdateManager';
 
@@ -97,6 +98,7 @@ export function App() {
               <Route path="products" element={<Products />} />
               <Route path="customers" element={<Customers />} />
               <Route path="inventory" element={<Inventory />} />
+              <Route path="updates" element={<AppUpdates />} />
             </Route>
 
             {/* Catch-all redirect to login */}

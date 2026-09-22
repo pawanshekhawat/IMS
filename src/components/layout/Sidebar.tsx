@@ -13,14 +13,16 @@ import {
   Settings,
   LogOut,
   UserCheck,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { updateService } from '../../services/updateService';
 
 interface SidebarProps {
   onNewSaleClick?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick: _onNewSaleClick }) => {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -30,7 +32,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
       label: 'Billing & Sales', 
       path: '/sales', 
       icon: Receipt,
-      badge: 'New Sale',
       roles: ['admin', 'staff']
     },
     { label: 'Products', path: '/products', icon: Package, roles: ['admin', 'staff'] },
@@ -40,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
     { label: 'Suppliers', path: '/suppliers', icon: Truck, roles: ['admin'] },
     { label: 'Expenses', path: '/expenses', icon: ReceiptText, roles: ['admin'] },
     { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin'] },
+    { label: 'App Updates', path: '/updates', icon: RefreshCw, roles: ['admin', 'staff'] },
     { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin'] },
   ];
 
@@ -70,12 +72,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
       {/* Brand Header */}
       <div
         style={{
-          padding: '20px 18px',
+          padding: '0 14px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           borderBottom: '1px solid var(--color-neutral-250)',
-          minHeight: '74px',
+          minHeight: '72px',
+          height: '72px',
           boxSizing: 'border-box',
         }}
       >
@@ -84,7 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
           alt="Garhwal Lights"
           style={{
             maxWidth: '100%',
-            height: '46px',
+            height: '70px',
+            maxHeight: '70px',
             objectFit: 'contain',
             filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.05))',
           }}
@@ -150,37 +154,54 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
                       {item.label}
                     </span>
                   </div>
-
-                  {item.badge && (
-                    <span
-                      onClick={(e) => {
-                        if (onNewSaleClick) {
-                          e.preventDefault();
-                          onNewSaleClick();
-                        }
-                      }}
-                      style={{
-                        backgroundColor: 'var(--color-tertiary-500)',
-                        color: 'var(--color-primary-900)',
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        padding: '3px 9px',
-                        borderRadius: '9999px',
-                        letterSpacing: '0.02em',
-                        lineHeight: 1,
-                        boxShadow: '0 2px 6px rgba(132, 204, 22, 0.4)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
                 </>
               )}
             </NavLink>
           );
         })}
       </nav>
+
+      {/* App Version & Quick Update Shortcut */}
+      <div style={{ padding: '0 12px 10px' }}>
+        <button
+          type="button"
+          onClick={() => navigate('/updates')}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '7px 10px',
+            backgroundColor: 'var(--color-neutral-150, #F3F4F6)',
+            border: '1px solid var(--color-neutral-300, #E5E7EB)',
+            borderRadius: 'var(--radius-md, 8px)',
+            fontSize: '11px',
+            fontWeight: 600,
+            color: 'var(--color-neutral-700)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#ECFDF5';
+            e.currentTarget.style.borderColor = '#A7F3D0';
+            e.currentTarget.style.color = '#065F46';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--color-neutral-150, #F3F4F6)';
+            e.currentTarget.style.borderColor = 'var(--color-neutral-300, #E5E7EB)';
+            e.currentTarget.style.color = 'var(--color-neutral-700)';
+          }}
+          title="Click to check for software updates"
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <RefreshCw size={12} color="var(--color-primary-600)" />
+            <span>v{updateService.getCurrentVersion()}</span>
+          </div>
+          <span style={{ fontSize: '10px', color: 'var(--color-primary-700)', fontWeight: 700 }}>
+            Update App →
+          </span>
+        </button>
+      </div>
 
       {/* Current User & Logout */}
       <div
@@ -264,46 +285,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
           <LogOut size={14} />
           <span>Logout</span>
         </button>
-      </div>
-
-      {/* Database Mode Status */}
-      <div
-        style={{
-          padding: '16px 20px',
-          borderTop: '1px solid var(--color-neutral-250)',
-          backgroundColor: 'var(--color-neutral-100)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--color-success)',
-              boxShadow: '0 0 8px rgba(22, 163, 74, 0.6)',
-            }}
-          />
-          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-neutral-700)' }}>
-            Local Storage
-          </span>
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontSize: '10px',
-              fontWeight: 700,
-              backgroundColor: 'var(--color-neutral-250)',
-              color: 'var(--color-neutral-600)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-            }}
-          >
-            Offline
-          </span>
-        </div>
-        <p style={{ fontSize: '11px', color: 'var(--color-neutral-500)', marginTop: '4px' }}>
-          Supabase Sync Ready
-        </p>
       </div>
     </aside>
   );

@@ -1,60 +1,64 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   RefreshCw, 
-  CheckCircle, 
+  CheckCircle,
   Store,
   Download,
   AlertCircle,
   ArrowUpCircle,
   Sparkles,
-  Cloud,
-  Server,
-  Key,
+  User,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
+import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { updateService, type UpdateInfo } from '../services/updateService';
-import { getSupabaseCredentials, saveSupabaseCredentials, isSupabaseConfigured, getSupabase } from '../services/supabaseClient';
 
 export const Settings: React.FC = () => {
+  const { user, updateDisplayName } = useAuth();
+  const [adminDisplayName, setAdminDisplayName] = useState(
+    user?.displayName || 'Himanshu Choudhary (Owner)'
+  );
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameFeedback, setNameFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.displayName) {
+      setAdminDisplayName(user.displayName);
+    }
+  }, [user?.displayName]);
+
+  const handleUpdateAdminName = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = adminDisplayName.trim();
+    if (!trimmed) return;
+    setNameSaving(true);
+    const ok = await updateDisplayName(trimmed);
+    setNameSaving(false);
+    if (ok) {
+      setNameFeedback('Administrator name updated successfully!');
+      setTimeout(() => setNameFeedback(null), 4000);
+    }
+  };
+
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
-  const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState<boolean>(() => {
     return localStorage.getItem('auto_update_enabled') !== 'false';
   });
 
-  // Supabase Configuration State
-  const initialCreds = getSupabaseCredentials();
-  const [supabaseUrl, setSupabaseUrl] = useState(initialCreds.url);
-  const [supabaseKey, setSupabaseKey] = useState(initialCreds.key);
-  const [supabaseFeedback, setSupabaseFeedback] = useState<string | null>(null);
-  const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>(
-    isSupabaseConfigured() ? 'connected' : 'idle'
-  );
-
   const handleToggleAutoUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.checked;
     setAutoUpdateEnabled(val);
     localStorage.setItem('auto_update_enabled', String(val));
-  };
-
-  const handleUpdateAdminPassword = async () => {
-    if (!newAdminPassword.trim()) return;
-    const ok = await authService.updatePassword('admin', newAdminPassword.trim());
-    if (ok) {
-      setPasswordFeedback('Admin password updated successfully!');
-      setNewAdminPassword('');
-      setTimeout(() => setPasswordFeedback(null), 4000);
-    }
   };
 
   const handleUpdateStaffPassword = async () => {
@@ -146,37 +150,6 @@ export const Settings: React.FC = () => {
     }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3000);
-  };
-
-  const handleSaveSupabase = () => {
-    saveSupabaseCredentials(supabaseUrl, supabaseKey);
-    setSupabaseFeedback('Supabase credentials saved successfully!');
-    setTimeout(() => setSupabaseFeedback(null), 3000);
-  };
-
-  const handleTestConnection = async () => {
-    setSupabaseStatus('testing');
-    setSupabaseFeedback(null);
-    try {
-      saveSupabaseCredentials(supabaseUrl, supabaseKey);
-      const client = getSupabase();
-      if (!client) {
-        setSupabaseStatus('error');
-        setSupabaseFeedback('Invalid URL or Anon Key. Please check the credentials.');
-        return;
-      }
-      const { error } = await client.from('products').select('id').limit(1);
-      if (error) {
-        setSupabaseStatus('error');
-        setSupabaseFeedback(`Connected to Supabase endpoint, but table query returned: ${error.message}. (Did you run supabase/schema.sql in SQL Editor?)`);
-      } else {
-        setSupabaseStatus('connected');
-        setSupabaseFeedback('✓ Connected to Supabase Cloud PostgreSQL successfully!');
-      }
-    } catch (err: any) {
-      setSupabaseStatus('error');
-      setSupabaseFeedback(err?.message || 'Connection failed.');
-    }
   };
 
   return (
@@ -468,18 +441,18 @@ export const Settings: React.FC = () => {
           </form>
         </Card>
 
-        {/* 3. User Accounts & Access Security */}
+        {/* 3. Administrator Profile & Display Name */}
         <Card
-          title="🔐 User Accounts & Access Passwords"
-          subtitle="Manage passwords for Admin and Counter Staff accounts"
+          title="👤 Administrator Profile & Display Name"
+          subtitle="Customize the owner / administrator name displayed on the dashboard, welcome screen, and sidebar"
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form onSubmit={handleUpdateAdminName} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gridTemplateColumns: '1fr',
+              maxWidth: '480px',
               gap: '16px',
             }}>
-              {/* Admin Password Box */}
               <div style={{
                 padding: '16px 18px',
                 borderRadius: 'var(--radius-lg)',
@@ -487,40 +460,78 @@ export const Settings: React.FC = () => {
                 border: '1px solid var(--color-neutral-300)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '12px',
+                gap: '14px',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                      Admin Account (Owner)
+                      Administrator Profile
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
-                      User ID: <strong>admin</strong> • Session-protected
+                      User ID: <strong>admin</strong> • Owner Permissions
                     </div>
                   </div>
-                  <Badge variant="primary">Admin</Badge>
+                  <Badge variant="success">Administrator</Badge>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="password"
-                    placeholder="New admin password"
-                    value={newAdminPassword}
-                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                    className="input-base"
-                    style={{ flex: 1, height: '36px', fontSize: '12px' }}
-                  />
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={handleUpdateAdminPassword}
-                    disabled={!newAdminPassword.trim()}
-                  >
-                    Save
-                  </Button>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-700)', marginBottom: '6px' }}>
+                    Owner / Admin Display Name
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type="text"
+                        placeholder="e.g. Himanshu Choudhary (Owner)"
+                        value={adminDisplayName}
+                        onChange={(e) => setAdminDisplayName(e.target.value)}
+                        className="input-base"
+                        style={{ width: '100%', height: '36px', fontSize: '12px', paddingLeft: '32px' }}
+                      />
+                      <User size={14} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      type="submit"
+                      disabled={!adminDisplayName.trim() || nameSaving}
+                    >
+                      {nameSaving ? 'Saving...' : 'Save'}
+                    </Button>
+                  </div>
                 </div>
               </div>
+            </div>
 
+            {nameFeedback && (
+              <div style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--color-success)',
+                padding: '8px 12px',
+                backgroundColor: '#dcfce7',
+                borderRadius: 'var(--radius-md)',
+                display: 'inline-block',
+                maxWidth: '480px',
+              }}>
+                ✓ {nameFeedback}
+              </div>
+            )}
+          </form>
+        </Card>
+
+        {/* 4. Staff Access & Counter Credentials */}
+        <Card
+          title="🔐 Staff Counter Account & Password"
+          subtitle="Manage login passcode for Showroom Counter Staff account"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr',
+              maxWidth: '480px',
+              gap: '16px',
+            }}>
               {/* Staff Password Box */}
               <div style={{
                 padding: '16px 18px',
@@ -575,106 +586,6 @@ export const Settings: React.FC = () => {
                 display: 'inline-block',
               }}>
                 ✓ {passwordFeedback}
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* 4. Supabase Cloud Database Configuration */}
-        <Card
-          title="☁️ Supabase Cloud Database"
-          subtitle="Real-time PostgreSQL backend syncing products, sales, and showroom inventory across all systems"
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Status Banner */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '14px 18px',
-              borderRadius: 'var(--radius-lg)',
-              backgroundColor: supabaseStatus === 'connected' ? '#ecfdf5' : 'var(--color-neutral-200)',
-              border: `1px solid ${supabaseStatus === 'connected' ? '#a7f3d0' : 'var(--color-neutral-300)'}`,
-              flexWrap: 'wrap',
-              gap: '12px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Cloud size={20} color={supabaseStatus === 'connected' ? 'var(--color-primary-800)' : 'var(--color-neutral-600)'} />
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                    Supabase PostgreSQL Cloud Connection
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)', marginTop: '2px' }}>
-                    {supabaseStatus === 'connected'
-                      ? 'Live cloud synchronization active across all devices and branches'
-                      : 'Paste your project URL and anon public key below or configure them in .env'}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Badge variant={supabaseStatus === 'connected' ? 'success' : 'warning'}>
-                  {supabaseStatus === 'connected' ? '● Live Connected' : '● Offline / Clean 0 State'}
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="outlined"
-                  icon={<RefreshCw size={13} className={supabaseStatus === 'testing' ? 'animate-spin' : ''} />}
-                  onClick={handleTestConnection}
-                  disabled={supabaseStatus === 'testing'}
-                >
-                  {supabaseStatus === 'testing' ? 'Testing...' : 'Test Connection'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Inputs */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <Input
-                label="Supabase Project URL"
-                value={supabaseUrl}
-                onChange={(e) => setSupabaseUrl(e.target.value)}
-                placeholder="https://baciicxeyqvjmbfgcjbm.supabase.co"
-                icon={<Server size={15} />}
-              />
-              <Input
-                label="Supabase Anon Key (Public)"
-                type="password"
-                value={supabaseKey}
-                onChange={(e) => setSupabaseKey(e.target.value)}
-                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                icon={<Key size={15} />}
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
-                Find your Anon Key in: <strong>Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API keys (anon public)</strong>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<CheckCircle size={14} color="#FFFFFF" />}
-                  onClick={handleSaveSupabase}
-                >
-                  Save Supabase Settings
-                </Button>
-              </div>
-            </div>
-
-            {supabaseFeedback && (
-              <div style={{
-                fontSize: '12px',
-                fontWeight: 600,
-                color: supabaseStatus === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
-                padding: '8px 12px',
-                backgroundColor: supabaseStatus === 'error' ? 'var(--color-danger-bg)' : '#dcfce7',
-                borderRadius: 'var(--radius-md)',
-                border: `1px solid ${supabaseStatus === 'error' ? '#fca5a5' : '#86efac'}`,
-              }}>
-                {supabaseFeedback}
               </div>
             )}
           </div>

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Check } from 'lucide-react';
 
 interface AdminWelcomeScreenProps {
   adminName?: string;
@@ -10,45 +9,34 @@ export const AdminWelcomeScreen: React.FC<AdminWelcomeScreenProps> = ({
   adminName = 'Himanshu Choudhary',
   onComplete,
 }) => {
-  const [phase, setPhase] = useState(0);
-  const [progress, setProgress] = useState(0);
+  const [animStage, setAnimStage] = useState<'ignite' | 'reveal' | 'radiate' | 'outro'>('ignite');
   const [isFadingOut, setIsFadingOut] = useState(false);
 
   useEffect(() => {
-    // Total animation duration: 4.5 seconds (4500ms)
-    const startTime = Date.now();
-    const duration = 4500;
+    // Stage 1: Initial spark & ignition (0s - 0.7s)
+    const t1 = setTimeout(() => setAnimStage('reveal'), 700);
 
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const pct = Math.min(100, Math.round((elapsed / duration) * 100));
-      setProgress(pct);
+    // Stage 2: Full logo illumination & typographic reveal (0.7s - 2.2s)
+    const t2 = setTimeout(() => setAnimStage('radiate'), 2200);
 
-      if (elapsed > 1200 && elapsed <= 2500) {
-        setPhase(1);
-      } else if (elapsed > 2500 && elapsed <= 3800) {
-        setPhase(2);
-      } else if (elapsed > 3800) {
-        setPhase(3);
-      }
+    // Stage 3: Cinematic light swell & dissolve (4.1s)
+    const t3 = setTimeout(() => {
+      setAnimStage('outro');
+      setIsFadingOut(true);
+    }, 4100);
 
-      if (elapsed >= duration) {
-        clearInterval(interval);
-        setIsFadingOut(true);
-        setTimeout(() => {
-          onComplete();
-        }, 400); // 400ms fade-out transition
-      }
-    }, 30);
+    // Complete transition into Dashboard at 4.6s
+    const t4 = setTimeout(() => {
+      onComplete();
+    }, 4600);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
   }, [onComplete]);
-
-  const milestones = [
-    { label: 'Owner Authentication Verified', completed: progress >= 25 },
-    { label: 'Connecting to Supabase Cloud Database', completed: progress >= 60 },
-    { label: 'Loading Real-Time Inventory & Sales Metrics', completed: progress >= 90 },
-  ];
 
   return (
     <div
@@ -56,256 +44,275 @@ export const AdminWelcomeScreen: React.FC<AdminWelcomeScreenProps> = ({
         position: 'fixed',
         inset: 0,
         zIndex: 99999,
-        background: 'radial-gradient(circle at 50% 38%, #0B4F3C 0%, #063729 45%, #021F17 100%)',
+        backgroundColor: '#03140E',
+        overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#FFFFFF',
-        fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-        opacity: isFadingOut ? 0 : 1,
-        transition: 'opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-        overflow: 'hidden',
         userSelect: 'none',
+        opacity: isFadingOut ? 0 : 1,
+        transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+        fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* Ambient Lighting Glow Spheres */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '30%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '500px',
-          height: '500px',
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(52, 211, 153, 0.2) 0%, rgba(16, 185, 129, 0.05) 50%, transparent 75%)',
-          filter: 'blur(40px)',
-          pointerEvents: 'none',
-          animation: 'pulseGlow 3s ease-in-out infinite alternate',
-        }}
-      />
-
       <style>{`
-        @keyframes pulseGlow {
-          0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.6; }
-          100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.95; }
+        /* Cinematic Spotlight Sweep */
+        @keyframes spotlightRotate {
+          0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+          50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.15); }
+          100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
         }
-        @keyframes cardFloat {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-6px); }
-          100% { transform: translateY(0px); }
+
+        /* Ambient Electric Pulse */
+        @keyframes bulbIgnitePulse {
+          0% { transform: scale(0.6); opacity: 0; filter: blur(30px) brightness(0.2); }
+          35% { transform: scale(1.1); opacity: 1; filter: blur(15px) brightness(2); }
+          60% { transform: scale(0.97); opacity: 0.9; filter: blur(10px) brightness(1.4); }
+          100% { transform: scale(1); opacity: 1; filter: blur(0px) brightness(1); }
         }
-        @keyframes ringSpin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+
+        /* 3D Holographic Tilt & Float */
+        @keyframes cinematicFloat {
+          0% { transform: translateY(0px) rotateX(0deg) rotateY(0deg); }
+          25% { transform: translateY(-8px) rotateX(2deg) rotateY(-2deg); }
+          50% { transform: translateY(-12px) rotateX(0deg) rotateY(0deg); }
+          75% { transform: translateY(-6px) rotateX(-2deg) rotateY(2deg); }
+          100% { transform: translateY(0px) rotateX(0deg) rotateY(0deg); }
+        }
+
+
+        /* Anamorphic Laser Flare Sweep */
+        @keyframes anamorphicSweep {
+          0% { transform: translateX(-150%) skewX(-35deg); opacity: 0; }
+          30% { opacity: 1; }
+          70% { opacity: 1; }
+          100% { transform: translateX(180%) skewX(-35deg); opacity: 0; }
+        }
+
+        /* Glow Aura Pulsing */
+        @keyframes auraBreath {
+          0% { opacity: 0.5; transform: scale(0.95); }
+          100% { opacity: 0.95; transform: scale(1.15); }
+        }
+
+        /* Typography Dramatic Fade In */
+        @keyframes titleReveal {
+          0% { opacity: 0; transform: translateY(24px) scale(0.95); filter: blur(12px); }
+          100% { opacity: 1; transform: translateY(0px) scale(1); filter: blur(0px); }
+        }
+
+        /* Floating Light Dust Motes */
+        @keyframes floatParticle {
+          0% { transform: translateY(0) translateX(0); opacity: 0; }
+          20% { opacity: 0.8; }
+          80% { opacity: 0.8; }
+          100% { transform: translateY(-160px) translateX(20px); opacity: 0; }
         }
       `}</style>
 
-      {/* Main Centered Welcome Card */}
+      {/* 1. Volumetric Rotating Light Cones / Architectural Spotlights */}
       <div
         style={{
+          position: 'absolute',
+          top: '45%',
+          left: '50%',
+          width: '900px',
+          height: '900px',
+          borderRadius: '50%',
+          background: 'conic-gradient(from 0deg, rgba(16, 185, 129, 0.08), rgba(52, 211, 153, 0.22), transparent, rgba(5, 150, 105, 0.18), transparent, rgba(52, 211, 153, 0.22))',
+          filter: 'blur(60px)',
+          animation: 'spotlightRotate 18s linear infinite',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* 2. Deep Radiant Radial Light Chamber */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '42%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '650px',
+          height: '650px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(52, 211, 153, 0.35) 0%, rgba(16, 185, 129, 0.15) 40%, rgba(6, 78, 59, 0.05) 70%, transparent 85%)',
+          filter: 'blur(50px)',
+          animation: 'auraBreath 3.5s ease-in-out infinite alternate',
+          pointerEvents: 'none',
+        }}
+      />
+
+
+      {/* 4. Floating Light Embers / Showroom Illumination Particles */}
+      {[...Array(14)].map((_, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            bottom: `${15 + (i * 5)}%`,
+            left: `${15 + (i * 5.8)}%`,
+            width: `${(i % 3) * 2 + 3}px`,
+            height: `${(i % 3) * 2 + 3}px`,
+            borderRadius: '50%',
+            backgroundColor: i % 2 === 0 ? '#6EE7B7' : '#A7F3D0',
+            boxShadow: '0 0 10px rgba(110, 231, 183, 0.9)',
+            animation: `floatParticle ${2.5 + (i % 3)}s ease-in-out infinite`,
+            animationDelay: `${(i * 0.25)}s`,
+            pointerEvents: 'none',
+          }}
+        />
+      ))}
+
+      {/* 5. Center Stage: The Illuminated Hero Logo Display */}
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 10,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           textAlign: 'center',
-          maxWidth: '520px',
-          width: '90%',
-          zIndex: 2,
+          perspective: '1200px',
         }}
       >
-        {/* Illuminated Brand Logo Container */}
+        {/* Animated Brand Capsule Card */}
         <div
           style={{
             position: 'relative',
-            marginBottom: '26px',
-            animation: 'cardFloat 4s ease-in-out infinite',
+            animation: 'bulbIgnitePulse 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards, cinematicFloat 5s ease-in-out 1.2s infinite',
+            marginBottom: '32px',
           }}
         >
-          {/* Outer glowing ring */}
+          {/* Intense Back-Glow Halo */}
           <div
             style={{
               position: 'absolute',
-              inset: '-8px',
-              borderRadius: '26px',
-              background: 'linear-gradient(135deg, rgba(52, 211, 153, 0.5), rgba(16, 185, 129, 0.1), rgba(110, 231, 183, 0.4))',
-              filter: 'blur(8px)',
+              inset: '-12px',
+              borderRadius: '28px',
+              background: 'linear-gradient(135deg, rgba(52, 211, 153, 0.8) 0%, rgba(16, 185, 129, 0.3) 50%, rgba(110, 231, 183, 0.7) 100%)',
+              filter: 'blur(22px)',
+              opacity: animStage === 'ignite' ? 0.3 : 1,
+              transition: 'opacity 0.6s ease',
             }}
           />
 
-          {/* Crisp Pure White Emblem Card */}
+          {/* Crisp Pure White Illuminated Stage Card */}
           <div
             style={{
               position: 'relative',
               backgroundColor: '#FFFFFF',
-              borderRadius: '20px',
-              padding: '16px 36px',
-              boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.8)',
+              borderRadius: '24px',
+              padding: '18px 48px',
+              boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(52, 211, 153, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              overflow: 'hidden',
             }}
           >
+            {/* Anamorphic Light Streak Sweeping across the Logo */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-50%',
+                left: '-60%',
+                width: '60px',
+                height: '200%',
+                background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.85), rgba(52, 211, 153, 0.9), transparent)',
+                filter: 'blur(3px)',
+                animation: 'anamorphicSweep 2.6s ease-in-out 0.8s infinite',
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* High-Resolution Brand Logo */}
             <img
               src="/garhwal-lights-logo-landscape-trns.png"
               alt="Garhwal Lights"
               style={{
-                height: '70px',
-                maxWidth: '280px',
+                height: '84px',
+                maxWidth: '340px',
                 objectFit: 'contain',
                 display: 'block',
+                filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.12))',
               }}
             />
           </div>
         </div>
 
-        {/* Welcome Tag */}
+        {/* 6. Typographic Reveal Sequence (Appears with smooth cinematic motion) */}
         <div
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 14px',
-            borderRadius: '999px',
-            backgroundColor: 'rgba(52, 211, 153, 0.15)',
-            border: '1px solid rgba(52, 211, 153, 0.35)',
-            color: '#6EE7B7',
-            fontSize: '11px',
-            fontWeight: 800,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            marginBottom: '14px',
-          }}
-        >
-          <Sparkles size={13} color="#6EE7B7" />
-          <span>Administrator Access Granted</span>
-        </div>
-
-        {/* Heading Greeting */}
-        <h1
-          style={{
-            fontSize: '28px',
-            fontWeight: 800,
-            margin: '0 0 8px',
-            letterSpacing: '-0.02em',
-            color: '#FFFFFF',
-            textShadow: '0 2px 10px rgba(0, 0, 0, 0.4)',
-          }}
-        >
-          Welcome, {adminName}
-        </h1>
-
-        <p
-          style={{
-            fontSize: '14px',
-            color: 'rgba(255, 255, 255, 0.75)',
-            margin: '0 0 28px',
-            fontWeight: 500,
-          }}
-        >
-          Garhwal Lights • Retail & Showroom Management System
-        </p>
-
-        {/* Smooth Loading Progress Bar */}
-        <div
-          style={{
-            width: '100%',
-            maxWidth: '420px',
-            marginBottom: '22px',
-          }}
-        >
-          <div
-            style={{
-              height: '6px',
-              width: '100%',
-              backgroundColor: 'rgba(255, 255, 255, 0.12)',
-              borderRadius: '999px',
-              overflow: 'hidden',
-              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.4)',
-              position: 'relative',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${progress}%`,
-                background: 'linear-gradient(90deg, #10B981 0%, #34D399 50%, #6EE7B7 100%)',
-                borderRadius: '999px',
-                transition: 'width 0.1s linear',
-                boxShadow: '0 0 12px rgba(52, 211, 153, 0.7)',
-              }}
-            />
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginTop: '8px',
-              fontSize: '11px',
-              color: 'rgba(255, 255, 255, 0.65)',
-              fontWeight: 600,
-            }}
-          >
-            <span>
-              {phase === 0 && 'Securing Administrator Credentials...'}
-              {phase === 1 && 'Syncing Cloud PostgreSQL Tables...'}
-              {phase === 2 && 'Calibrating Inventory & Daily Registers...'}
-              {phase === 3 && 'Ready! Opening Portal...'}
-            </span>
-            <span style={{ color: '#34D399', fontWeight: 800 }}>{progress}%</span>
-          </div>
-        </div>
-
-        {/* Sub-steps Checklist */}
-        <div
-          style={{
+            animation: 'titleReveal 1s cubic-bezier(0.16, 1, 0.3, 1) 0.6s forwards',
+            opacity: 0,
             display: 'flex',
             flexDirection: 'column',
-            gap: '8px',
-            width: '100%',
-            maxWidth: '380px',
-            textAlign: 'left',
+            alignItems: 'center',
           }}
         >
-          {milestones.map((step, idx) => (
-            <div
-              key={idx}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                fontSize: '12px',
-                color: step.completed ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.4)',
-                transition: 'color 0.3s ease',
-              }}
-            >
-              <div
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  borderRadius: '50%',
-                  backgroundColor: step.completed ? '#10B981' : 'rgba(255, 255, 255, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  transition: 'all 0.3s ease',
-                  border: step.completed ? 'none' : '1px solid rgba(255, 255, 255, 0.2)',
-                }}
-              >
-                {step.completed ? (
-                  <Check size={11} color="#FFFFFF" strokeWidth={3} />
-                ) : (
-                  <span style={{ width: '4px', height: '4px', borderRadius: '50%', backgroundColor: 'rgba(255, 255, 255, 0.4)' }} />
-                )}
-              </div>
-              <span style={{ fontWeight: step.completed ? 600 : 400 }}>{step.label}</span>
-            </div>
-          ))}
+          {/* Subtle Ambient Brand Header */}
+          <div
+            style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              letterSpacing: '0.35em',
+              textTransform: 'uppercase',
+              color: '#6EE7B7',
+              textShadow: '0 0 16px rgba(52, 211, 153, 0.8)',
+              marginBottom: '10px',
+            }}
+          >
+            SHOWROOM PORTAL
+          </div>
+
+          {/* Grand Welcome Heading */}
+          <h1
+            style={{
+              fontSize: '36px',
+              fontWeight: 800,
+              margin: '0 0 10px',
+              letterSpacing: '-0.025em',
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #F1F5F9 45%, #6EE7B7 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              textShadow: '0 4px 25px rgba(0, 0, 0, 0.7)',
+            }}
+          >
+            Welcome, {adminName}
+          </h1>
+
+          {/* Subtitle */}
+          <p
+            style={{
+              fontSize: '15px',
+              color: 'rgba(255, 255, 255, 0.75)',
+              margin: 0,
+              fontWeight: 500,
+              letterSpacing: '0.01em',
+              textShadow: '0 2px 10px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            Garhwal Lights • Shivam Heights, Sikar
+          </p>
         </div>
       </div>
+
+      {/* 7. Ambient Horizontal Anamorphic Lens Flare Line across screen */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '42%',
+          left: '0',
+          right: '0',
+          height: '1px',
+          background: 'linear-gradient(90deg, transparent 0%, rgba(52, 211, 153, 0.1) 20%, rgba(110, 231, 183, 0.7) 50%, rgba(52, 211, 153, 0.1) 80%, transparent 100%)',
+          boxShadow: '0 0 16px rgba(52, 211, 153, 0.8)',
+          pointerEvents: 'none',
+          animation: 'auraBreath 3s ease-in-out infinite alternate',
+        }}
+      />
     </div>
   );
 };
