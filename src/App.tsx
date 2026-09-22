@@ -1,6 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { AppLayout } from './components/layout/AppLayout';
+import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Products } from './pages/Products';
 import { SalesBilling } from './pages/SalesBilling';
@@ -24,22 +27,77 @@ const queryClient = new QueryClient({
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<AppLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="products" element={<Products />} />
-            <Route path="sales" element={<SalesBilling />} />
-            <Route path="customers" element={<Customers />} />
-            <Route path="purchases" element={<Purchases />} />
-            <Route path="suppliers" element={<Suppliers />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="expenses" element={<Expenses />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              {/* Admin-only routes */}
+              <Route
+                index
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="purchases"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Purchases />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="suppliers"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Suppliers />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="expenses"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Expenses />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="reports"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Reports />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="settings"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <Settings />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Shared routes accessible to both Staff and Admin */}
+              <Route path="sales" element={<SalesBilling />} />
+              <Route path="products" element={<Products />} />
+              <Route path="customers" element={<Customers />} />
+              <Route path="inventory" element={<Inventory />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

@@ -154,3 +154,22 @@ export interface DashboardStats {
   monthlySalesTotal: number;
   monthlyExpensesTotal: number;
 }
+
+export type UserRole = 'admin' | 'staff';
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  passwordHash: string;
+  displayName: string;
+  role: UserRole;
+  createdAt: string;
+}
+
+export interface UserSession {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  loginTime: string;
+}

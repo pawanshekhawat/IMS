@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -12,30 +12,45 @@ import {
   BarChart3,
   Settings,
   Sparkles,
+  LogOut,
+  UserCheck,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   onNewSaleClick?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
-  const navItems = [
-    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
-    { label: 'Products', path: '/products', icon: Package },
+  const { user, role, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const allNavItems = [
+    { label: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['admin'] },
     { 
       label: 'Billing & Sales', 
       path: '/sales', 
       icon: Receipt,
-      badge: 'New Sale'
+      badge: 'New Sale',
+      roles: ['admin', 'staff']
     },
-    { label: 'Customers', path: '/customers', icon: Users },
-    { label: 'Purchases', path: '/purchases', icon: ShoppingBag },
-    { label: 'Suppliers', path: '/suppliers', icon: Truck },
-    { label: 'Inventory', path: '/inventory', icon: Warehouse },
-    { label: 'Expenses', path: '/expenses', icon: ReceiptText },
-    { label: 'Reports', path: '/reports', icon: BarChart3 },
-    { label: 'Settings', path: '/settings', icon: Settings },
+    { label: 'Products', path: '/products', icon: Package, roles: ['admin', 'staff'] },
+    { label: 'Customers', path: '/customers', icon: Users, roles: ['admin', 'staff'] },
+    { label: 'Inventory', path: '/inventory', icon: Warehouse, roles: ['admin', 'staff'] },
+    { label: 'Purchases', path: '/purchases', icon: ShoppingBag, roles: ['admin'] },
+    { label: 'Suppliers', path: '/suppliers', icon: Truck, roles: ['admin'] },
+    { label: 'Expenses', path: '/expenses', icon: ReceiptText, roles: ['admin'] },
+    { label: 'Reports', path: '/reports', icon: BarChart3, roles: ['admin'] },
+    { label: 'Settings', path: '/settings', icon: Settings, roles: ['admin'] },
   ];
+
+  const currentRole = role || 'staff';
+  const navItems = allNavItems.filter(item => item.roles.includes(currentRole));
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside
@@ -192,6 +207,90 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
           );
         })}
       </nav>
+
+      {/* Current User & Logout */}
+      <div
+        style={{
+          padding: '14px 18px',
+          borderTop: '1px solid var(--color-neutral-250)',
+          backgroundColor: '#FFFFFF',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              backgroundColor: currentRole === 'admin' ? 'var(--color-primary-100)' : 'var(--color-neutral-200)',
+              color: currentRole === 'admin' ? 'var(--color-primary-800)' : 'var(--color-neutral-700)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <UserCheck size={16} />
+          </div>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <div style={{
+              fontSize: '13px',
+              fontWeight: 700,
+              color: 'var(--color-neutral-900)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {user?.displayName || (currentRole === 'admin' ? 'Admin' : 'Staff')}
+            </div>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: 600,
+              color: currentRole === 'admin' ? 'var(--color-primary-700)' : 'var(--color-neutral-500)',
+              textTransform: 'capitalize',
+            }}>
+              {currentRole === 'admin' ? 'Admin' : 'Staff'}
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '6px 10px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-neutral-300)',
+            backgroundColor: 'var(--color-neutral-100)',
+            color: 'var(--color-neutral-700)',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--color-danger-bg)';
+            e.currentTarget.style.borderColor = '#fca5a5';
+            e.currentTarget.style.color = 'var(--color-danger)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--color-neutral-100)';
+            e.currentTarget.style.borderColor = 'var(--color-neutral-300)';
+            e.currentTarget.style.color = 'var(--color-neutral-700)';
+          }}
+          title="Logout from this account"
+        >
+          <LogOut size={14} />
+          <span>Logout</span>
+        </button>
+      </div>
 
       {/* Database Mode Status */}
       <div

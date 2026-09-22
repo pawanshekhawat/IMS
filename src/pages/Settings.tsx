@@ -12,10 +12,34 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
 import { dataService } from '../services/dataService';
+import { authService } from '../services/authService';
 
 export const Settings: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'latest' | 'available'>('idle');
   const [reseedLoading, setReseedLoading] = useState(false);
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
+
+  const handleUpdateAdminPassword = () => {
+    if (!newAdminPassword.trim()) return;
+    const ok = authService.updatePassword('admin', newAdminPassword.trim());
+    if (ok) {
+      setPasswordFeedback('Admin password updated successfully!');
+      setNewAdminPassword('');
+      setTimeout(() => setPasswordFeedback(null), 4000);
+    }
+  };
+
+  const handleUpdateStaffPassword = () => {
+    if (!newStaffPassword.trim()) return;
+    const ok = authService.updatePassword('staff', newStaffPassword.trim());
+    if (ok) {
+      setPasswordFeedback('Staff password updated successfully!');
+      setNewStaffPassword('');
+      setTimeout(() => setPasswordFeedback(null), 4000);
+    }
+  };
   const defaultStoreInfo = {
     name: 'Garhwal Lights - Retail & Showroom',
     tagline: 'Premium Architectural & Decorative Lighting',
@@ -199,7 +223,119 @@ export const Settings: React.FC = () => {
           </form>
         </Card>
 
-        {/* 3. Database Maintenance & Local Data Utilities */}
+        {/* 3. User Accounts & Access Security */}
+        <Card
+          title="🔐 User Accounts & Access Passwords"
+          subtitle="Manage passwords for Admin and Counter Staff accounts"
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+              gap: '16px',
+            }}>
+              {/* Admin Password Box */}
+              <div style={{
+                padding: '16px 18px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--color-neutral-200)',
+                border: '1px solid var(--color-neutral-300)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
+                      Admin Account (Owner)
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
+                      User ID: <strong>admin</strong> • Session-protected
+                    </div>
+                  </div>
+                  <Badge variant="primary">Admin</Badge>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="password"
+                    placeholder="New admin password"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    className="input-base"
+                    style={{ flex: 1, height: '36px', fontSize: '12px' }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={handleUpdateAdminPassword}
+                    disabled={!newAdminPassword.trim()}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+
+              {/* Staff Password Box */}
+              <div style={{
+                padding: '16px 18px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--color-neutral-200)',
+                border: '1px solid var(--color-neutral-300)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
+                      Staff Account (Counter POS)
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
+                      User ID: <strong>staff</strong> • Persistent Login
+                    </div>
+                  </div>
+                  <Badge variant="warning">Staff</Badge>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="password"
+                    placeholder="New staff password"
+                    value={newStaffPassword}
+                    onChange={(e) => setNewStaffPassword(e.target.value)}
+                    className="input-base"
+                    style={{ flex: 1, height: '36px', fontSize: '12px' }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={handleUpdateStaffPassword}
+                    disabled={!newStaffPassword.trim()}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {passwordFeedback && (
+              <div style={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: 'var(--color-success)',
+                padding: '8px 12px',
+                backgroundColor: '#dcfce7',
+                borderRadius: 'var(--radius-md)',
+                display: 'inline-block',
+              }}>
+                ✓ {passwordFeedback}
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* 4. Database Maintenance & Local Data Utilities */}
         <Card
           title="💾 Local Database & Data Utilities"
           subtitle="Manage offline storage and reseed default inventory fixtures"

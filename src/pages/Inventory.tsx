@@ -14,8 +14,10 @@ import { Table, type TableColumn } from '../components/ui/Table';
 import { dataService } from '../services/dataService';
 import type { Product, StockMovement } from '../types';
 import { StockAdjustmentModal } from '../crud/StockAdjustmentModal';
+import { useAuth } from '../context/AuthContext';
 
 export const Inventory: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filterQuery = searchParams.get('filter');
   const initialMode: 'ALL' | 'LOW' | 'OUT' = 
@@ -112,15 +114,17 @@ export const Inventory: React.FC = () => {
       accessor: (p) => <span style={{ fontSize: '12px', color: 'var(--color-neutral-600)' }}>{p.minStockLevel} {p.unit}</span>,
       align: 'center',
     },
-    {
-      header: 'Stock Valuation',
-      accessor: (p) => (
-        <span style={{ fontWeight: 700, color: 'var(--color-neutral-800)', fontSize: '13px' }}>
-          ₹{(p.costPrice * p.stockQuantity).toLocaleString('en-IN')}
-        </span>
-      ),
-      align: 'right',
-    },
+    ...(isAdmin ? [
+      {
+        header: 'Stock Valuation',
+        accessor: (p: Product) => (
+          <span style={{ fontWeight: 700, color: 'var(--color-neutral-800)', fontSize: '13px' }}>
+            ₹{(p.costPrice * p.stockQuantity).toLocaleString('en-IN')}
+          </span>
+        ),
+        align: 'right' as const,
+      },
+    ] : []),
     {
       header: 'Status',
       accessor: (p) => {

@@ -8,8 +8,10 @@ import { dataService } from '../services/dataService';
 import type { Product, Supplier } from '../types';
 import { ProductCrudModal } from '../crud/ProductCrudModal';
 import { StockAdjustmentModal } from '../crud/StockAdjustmentModal';
+import { useAuth } from '../context/AuthContext';
 
 export const Products: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,11 +125,13 @@ export const Products: React.FC = () => {
         </span>
       ),
     },
-    {
-      header: 'Cost Price',
-      accessor: (p) => <span style={{ color: 'var(--color-neutral-600)' }}>₹{p.costPrice.toLocaleString('en-IN')}</span>,
-      align: 'right',
-    },
+    ...(isAdmin ? [
+      {
+        header: 'Cost Price',
+        accessor: (p: Product) => <span style={{ color: 'var(--color-neutral-600)' }}>₹{p.costPrice.toLocaleString('en-IN')}</span>,
+        align: 'right' as const,
+      },
+    ] : []),
     {
       header: 'Selling Price (MRP)',
       accessor: (p) => (
@@ -137,18 +141,20 @@ export const Products: React.FC = () => {
       ),
       align: 'right',
     },
-    {
-      header: 'Margin %',
-      accessor: (p) => {
-        const margin = p.sellingPrice > 0 ? Math.round(((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100) : 0;
-        return (
-          <span style={{ fontSize: '12px', fontWeight: 700, color: margin >= 30 ? 'var(--color-success)' : 'var(--color-neutral-600)' }}>
-            {margin}%
-          </span>
-        );
+    ...(isAdmin ? [
+      {
+        header: 'Margin %',
+        accessor: (p: Product) => {
+          const margin = p.sellingPrice > 0 ? Math.round(((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100) : 0;
+          return (
+            <span style={{ fontSize: '12px', fontWeight: 700, color: margin >= 30 ? 'var(--color-success)' : 'var(--color-neutral-600)' }}>
+              {margin}%
+            </span>
+          );
+        },
+        align: 'center' as const,
       },
-      align: 'center',
-    },
+    ] : []),
     {
       header: 'Stock Qty',
       accessor: (p) => (
@@ -180,69 +186,71 @@ export const Products: React.FC = () => {
       header: 'Shelf / Location',
       accessor: (p) => <span style={{ fontSize: '12px', color: 'var(--color-neutral-500)' }}>{p.location || '—'}</span>,
     },
-    {
-      header: 'Actions',
-      accessor: (p) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => setProductToAdjust(p)}
-            title="Adjust Stock (+ / -)"
-            style={{
-              padding: '6px 10px',
-              borderRadius: '9999px',
-              backgroundColor: 'var(--color-neutral-200)',
-              border: '1px solid var(--color-neutral-300)',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 700,
-              color: 'var(--color-neutral-800)',
-            }}
-          >
-            Adjust
-          </button>
-          <button
-            onClick={() => {
-              setProductToEdit(p);
-              setIsCrudModalOpen(true);
-            }}
-            title="Edit Details"
-            style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: 'var(--color-neutral-200)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-neutral-700)',
-            }}
-          >
-            <Edit2 size={13} />
-          </button>
-          <button
-            onClick={() => handleDeleteProduct(p)}
-            title="Delete Product"
-            style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: 'var(--color-danger-bg)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-danger)',
-            }}
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      ),
-      align: 'right',
-    },
+    ...(isAdmin ? [
+      {
+        header: 'Actions',
+        accessor: (p: Product) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setProductToAdjust(p)}
+              title="Adjust Stock (+ / -)"
+              style={{
+                padding: '6px 10px',
+                borderRadius: '9999px',
+                backgroundColor: 'var(--color-neutral-200)',
+                border: '1px solid var(--color-neutral-300)',
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: 'var(--color-neutral-800)',
+              }}
+            >
+              Adjust
+            </button>
+            <button
+              onClick={() => {
+                setProductToEdit(p);
+                setIsCrudModalOpen(true);
+              }}
+              title="Edit Details"
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                border: 'none',
+                backgroundColor: 'var(--color-neutral-200)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-neutral-700)',
+              }}
+            >
+              <Edit2 size={13} />
+            </button>
+            <button
+              onClick={() => handleDeleteProduct(p)}
+              title="Delete Product"
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                border: 'none',
+                backgroundColor: 'var(--color-danger-bg)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-danger)',
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ),
+        align: 'right' as const,
+      },
+    ] : []),
   ];
 
   return (
@@ -250,11 +258,11 @@ export const Products: React.FC = () => {
       <Header
         title="Products & Lighting Catalog"
         subtitle="Manage showroom inventory, pricing, SKUs, and stock limits"
-        quickActionLabel="Add Product"
-        onQuickAction={() => {
+        quickActionLabel={isAdmin ? "Add Product" : undefined}
+        onQuickAction={isAdmin ? () => {
           setProductToEdit(null);
           setIsCrudModalOpen(true);
-        }}
+        } : undefined}
         onSearch={setSearchQuery}
       />
 
