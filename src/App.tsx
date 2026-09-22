@@ -15,6 +15,8 @@ import { Expenses } from './pages/Expenses';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 
+import { AutoUpdateManager } from './components/common/AutoUpdateManager';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -29,6 +31,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <AutoUpdateManager />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route

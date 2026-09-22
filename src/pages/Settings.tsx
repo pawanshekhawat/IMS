@@ -28,6 +28,15 @@ export const Settings: React.FC = () => {
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('auto_update_enabled') !== 'false';
+  });
+
+  const handleToggleAutoUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.checked;
+    setAutoUpdateEnabled(val);
+    localStorage.setItem('auto_update_enabled', String(val));
+  };
 
   const handleUpdateAdminPassword = () => {
     if (!newAdminPassword.trim()) return;
@@ -189,6 +198,37 @@ export const Settings: React.FC = () => {
               >
                 {updateStatus === 'checking' ? 'Connecting to GitHub...' : 'Check for Updates'}
               </Button>
+            </div>
+
+            {/* Auto-Update & Auto-Restart Setting */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 18px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--color-neutral-100)',
+              border: '1px solid var(--color-neutral-250)',
+              flexWrap: 'wrap',
+              gap: '10px',
+            }}>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-neutral-900)' }}>
+                  Automatic Background Updates & Auto-Restart
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)', marginTop: '2px' }}>
+                  When new versions are published to GitHub Releases, silently download in background and auto-restart app when ready.
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-800)' }}>
+                <input
+                  type="checkbox"
+                  checked={autoUpdateEnabled}
+                  onChange={handleToggleAutoUpdate}
+                  style={{ width: '16px', height: '16px', accentColor: 'var(--color-primary-800)' }}
+                />
+                {autoUpdateEnabled ? 'Enabled' : 'Disabled'}
+              </label>
             </div>
 
             {/* Update Available Banner & Action */}
