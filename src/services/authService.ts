@@ -1,22 +1,24 @@
 import type { UserAccount, UserSession } from '../types';
+import { getSupabase } from './supabaseClient';
 
 const ACCOUNTS_STORAGE_KEY = 'gl_ims_user_accounts';
 const STAFF_SESSION_KEY = 'gl_ims_staff_session';
 const ADMIN_SESSION_KEY = 'gl_ims_admin_session';
 
-const DEFAULT_ACCOUNTS: UserAccount[] = [
+// Defaults read dynamically from .env with standard fallbacks
+const getEnvDefaultAccounts = (): UserAccount[] => [
   {
     id: 'user_admin_01',
-    username: 'admin',
-    passwordHash: 'admin123',
+    username: (import.meta.env.VITE_ADMIN_ID || 'admin').trim().toLowerCase(),
+    passwordHash: (import.meta.env.VITE_ADMIN_PASSWORD || 'admin123').trim(),
     displayName: 'Pawan Shekhawat (Owner)',
     role: 'admin',
     createdAt: '2026-01-01T00:00:00.000Z',
   },
   {
     id: 'user_staff_01',
-    username: 'staff',
-    passwordHash: 'staff123',
+    username: (import.meta.env.VITE_STAFF_ID || 'staff').trim().toLowerCase(),
+    passwordHash: (import.meta.env.VITE_STAFF_PASSWORD || 'staff123').trim(),
     displayName: 'Showroom Billing Staff',
     role: 'staff',
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -25,19 +27,31 @@ const DEFAULT_ACCOUNTS: UserAccount[] = [
 
 class AuthService {
   private getStoredAccounts(): UserAccount[] {
+    const defaults = getEnvDefaultAccounts();
     try {
       const data = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
       if (data) {
-        const accounts = JSON.parse(data);
+        const accounts: UserAccount[] = JSON.parse(data);
         if (Array.isArray(accounts) && accounts.length > 0) {
-          return accounts;
+          // Merge with any env overrides if usernames match
+          return accounts.map(acc => {
+            const matchedEnv = defaults.find(d => d.role === acc.role);
+            if (matchedEnv) {
+              return {
+                ...acc,
+                username: acc.username || matchedEnv.username,
+                passwordHash: acc.passwordHash || matchedEnv.passwordHash,
+              };
+            }
+            return acc;
+          });
         }
       }
     } catch {
-      // fallback to defaults
+      // fallback
     }
-    this.saveAccounts(DEFAULT_ACCOUNTS);
-    return DEFAULT_ACCOUNTS;
+    this.saveAccounts(defaults);
+    return defaults;
   }
 
   private saveAccounts(accounts: UserAccount[]): void {
@@ -52,18 +66,68 @@ class AuthService {
     return this.getStoredAccounts();
   }
 
-  public updatePassword(username: string, newPassword: string): boolean {
+  public async updatePassword(username: string, newPassword: string): Promise<boolean> {
+    const cleanUsername = username.trim().toLowerCase();
     const accounts = this.getStoredAccounts();
-    const target = accounts.find(a => a.username.toLowerCase() === username.toLowerCase());
+    const target = accounts.find(a => a.username.toLowerCase() === cleanUsername);
     if (!target) return false;
 
     target.passwordHash = newPassword;
     this.saveAccounts(accounts);
+
+    // Also update in Supabase database if configured
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        await supabase
+          .from('app_users')
+          .update({ password_hash: newPassword })
+          .eq('username', cleanUsername);
+      } catch (err) {
+        console.warn('Could not sync password update to Supabase app_users table:', err);
+      }
+    }
+
     return true;
   }
 
-  public login(username: string, password: string): { success: boolean; session?: UserSession; error?: string } {
+  public async login(
+    username: string, 
+    password: string
+  ): Promise<{ success: boolean; session?: UserSession; error?: string }> {
     const cleanUsername = username.trim().toLowerCase();
+    const supabase = getSupabase();
+
+    // 1. Try authenticating via Supabase 'app_users' table if online & configured
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('app_users')
+          .select('*')
+          .eq('username', cleanUsername)
+          .maybeSingle();
+
+        if (!error && data) {
+          if (data.password_hash === password) {
+            const session: UserSession = {
+              id: data.id,
+              username: data.username,
+              displayName: data.display_name,
+              role: data.role as 'admin' | 'staff',
+              loginTime: new Date().toISOString(),
+            };
+            this.persistSession(session);
+            return { success: true, session };
+          } else {
+            return { success: false, error: 'Incorrect password. Please try again.' };
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase authentication check failed, falling back to local/env:', err);
+      }
+    }
+
+    // 2. Fallback to .env and local account storage
     const accounts = this.getStoredAccounts();
     const account = accounts.find(a => a.username.toLowerCase() === cleanUsername);
 
@@ -83,27 +147,26 @@ class AuthService {
       loginTime: new Date().toISOString(),
     };
 
-    if (account.role === 'staff') {
-      // Staff session persists in localStorage so they don't have to enter password on every launch
+    this.persistSession(session);
+    return { success: true, session };
+  }
+
+  private persistSession(session: UserSession): void {
+    if (session.role === 'staff') {
       try {
         localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(session));
-        // Clear any previous admin session
         sessionStorage.removeItem(ADMIN_SESSION_KEY);
       } catch (e) {
         console.error('Error saving staff session', e);
       }
     } else {
-      // Admin session is stored in sessionStorage only: requires password on each new app launch
       try {
         sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
-        // Also clear staff session so reopening the app doesn't automatically fall into staff
         localStorage.removeItem(STAFF_SESSION_KEY);
       } catch (e) {
         console.error('Error saving admin session', e);
       }
     }
-
-    return { success: true, session };
   }
 
   public getActiveSession(): UserSession | null {
@@ -128,6 +191,10 @@ class AuthService {
     }
 
     return null;
+  }
+
+  public isAuthenticated(): boolean {
+    return this.getActiveSession() !== null;
   }
 
   public logout(): void {

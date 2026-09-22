@@ -28,7 +28,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const res = authService.login(username, password);
+    const res = await authService.login(username, password);
     if (res.success && res.session) {
       setUser(res.session);
       return { success: true };

@@ -4,11 +4,13 @@ import {
   CheckCircle, 
   RotateCcw,
   Store,
-  Database,
   Download,
   AlertCircle,
   ArrowUpCircle,
   Sparkles,
+  Cloud,
+  Server,
+  Key,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
@@ -18,6 +20,7 @@ import { Input } from '../components/ui/Input';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
 import { updateService, type UpdateInfo } from '../services/updateService';
+import { getSupabaseCredentials, saveSupabaseCredentials, isSupabaseConfigured, getSupabase } from '../services/supabaseClient';
 
 export const Settings: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
@@ -32,15 +35,24 @@ export const Settings: React.FC = () => {
     return localStorage.getItem('auto_update_enabled') !== 'false';
   });
 
+  // Supabase Configuration State
+  const initialCreds = getSupabaseCredentials();
+  const [supabaseUrl, setSupabaseUrl] = useState(initialCreds.url);
+  const [supabaseKey, setSupabaseKey] = useState(initialCreds.key);
+  const [supabaseFeedback, setSupabaseFeedback] = useState<string | null>(null);
+  const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'testing' | 'connected' | 'error'>(
+    isSupabaseConfigured() ? 'connected' : 'idle'
+  );
+
   const handleToggleAutoUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.checked;
     setAutoUpdateEnabled(val);
     localStorage.setItem('auto_update_enabled', String(val));
   };
 
-  const handleUpdateAdminPassword = () => {
+  const handleUpdateAdminPassword = async () => {
     if (!newAdminPassword.trim()) return;
-    const ok = authService.updatePassword('admin', newAdminPassword.trim());
+    const ok = await authService.updatePassword('admin', newAdminPassword.trim());
     if (ok) {
       setPasswordFeedback('Admin password updated successfully!');
       setNewAdminPassword('');
@@ -48,9 +60,9 @@ export const Settings: React.FC = () => {
     }
   };
 
-  const handleUpdateStaffPassword = () => {
+  const handleUpdateStaffPassword = async () => {
     if (!newStaffPassword.trim()) return;
-    const ok = authService.updatePassword('staff', newStaffPassword.trim());
+    const ok = await authService.updatePassword('staff', newStaffPassword.trim());
     if (ok) {
       setPasswordFeedback('Staff password updated successfully!');
       setNewStaffPassword('');
@@ -139,12 +151,43 @@ export const Settings: React.FC = () => {
     setTimeout(() => setSavedSuccess(false), 3000);
   };
 
+  const handleSaveSupabase = () => {
+    saveSupabaseCredentials(supabaseUrl, supabaseKey);
+    setSupabaseFeedback('Supabase credentials saved successfully!');
+    setTimeout(() => setSupabaseFeedback(null), 3000);
+  };
+
+  const handleTestConnection = async () => {
+    setSupabaseStatus('testing');
+    setSupabaseFeedback(null);
+    try {
+      saveSupabaseCredentials(supabaseUrl, supabaseKey);
+      const client = getSupabase();
+      if (!client) {
+        setSupabaseStatus('error');
+        setSupabaseFeedback('Invalid URL or Anon Key. Please check the credentials.');
+        return;
+      }
+      const { error } = await client.from('products').select('id').limit(1);
+      if (error) {
+        setSupabaseStatus('error');
+        setSupabaseFeedback(`Connected to Supabase endpoint, but table query returned: ${error.message}. (Did you run supabase/schema.sql in SQL Editor?)`);
+      } else {
+        setSupabaseStatus('connected');
+        setSupabaseFeedback('✓ Connected to Supabase Cloud PostgreSQL successfully!');
+      }
+    } catch (err: any) {
+      setSupabaseStatus('error');
+      setSupabaseFeedback(err?.message || 'Connection failed.');
+    }
+  };
+
   const handleResetData = async () => {
-    if (window.confirm('Reset all showroom local database tables to default sample inventory? This will reload the 29 lighting fixtures and initial records.')) {
+    if (window.confirm('Clear all local data and reset showroom inventory, sales, and purchases to 0?')) {
       setReseedLoading(true);
       await dataService.resetToSampleData();
       setReseedLoading(false);
-      alert('Local database reseeded successfully with real products and photos!');
+      alert('All showroom tables reset to clean 0!');
       window.location.reload();
     }
   };
@@ -154,7 +197,7 @@ export const Settings: React.FC = () => {
       <Header
         title="App Settings & System Controls"
         subtitle="OTA desktop updates, showroom store profile, and database management"
-        quickActionLabel="Reseed Database"
+        quickActionLabel="Reset Data to 0"
         onQuickAction={handleResetData}
       />
 
@@ -552,44 +595,114 @@ export const Settings: React.FC = () => {
           </div>
         </Card>
 
-        {/* 4. Database Maintenance & Local Data Utilities */}
+        {/* 4. Supabase Cloud Database Configuration */}
         <Card
-          title="💾 Local Database & Data Utilities"
-          subtitle="Manage offline storage and reseed default inventory fixtures"
+          title="☁️ Supabase Cloud Database"
+          subtitle="Real-time PostgreSQL backend syncing products, sales, and showroom inventory across all systems"
         >
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 20px',
-            borderRadius: 'var(--radius-lg)',
-            backgroundColor: 'var(--color-neutral-200)',
-            border: '1px solid var(--color-neutral-300)',
-            flexWrap: 'wrap',
-            gap: '14px',
-          }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Database size={18} color="var(--color-primary-800)" />
-                <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                  Local Storage Engine (IndexedDB)
-                </span>
-                <Badge variant="primary">Offline-First</Badge>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Status Banner */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 18px',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: supabaseStatus === 'connected' ? '#ecfdf5' : 'var(--color-neutral-200)',
+              border: `1px solid ${supabaseStatus === 'connected' ? '#a7f3d0' : 'var(--color-neutral-300)'}`,
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Cloud size={20} color={supabaseStatus === 'connected' ? 'var(--color-primary-800)' : 'var(--color-neutral-600)'} />
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
+                    Supabase PostgreSQL Cloud Connection
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)', marginTop: '2px' }}>
+                    {supabaseStatus === 'connected'
+                      ? 'Live cloud synchronization active across all devices and branches'
+                      : 'Paste your project URL and anon public key below or configure them in .env'}
+                  </div>
+                </div>
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--color-neutral-600)', marginTop: '4px' }}>
-                Instant local response time. All transactions, customers, and product photos persist safely on this PC.
-              </p>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Badge variant={supabaseStatus === 'connected' ? 'success' : 'warning'}>
+                  {supabaseStatus === 'connected' ? '● Live Connected' : '● Offline / Clean 0 State'}
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outlined"
+                  icon={<RefreshCw size={13} className={supabaseStatus === 'testing' ? 'animate-spin' : ''} />}
+                  onClick={handleTestConnection}
+                  disabled={supabaseStatus === 'testing'}
+                >
+                  {supabaseStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+                </Button>
+              </div>
             </div>
 
-            <Button
-              variant="outlined"
-              size="sm"
-              icon={<RotateCcw size={14} />}
-              isLoading={reseedLoading}
-              onClick={handleResetData}
-            >
-              Reseed Default Sample Data
-            </Button>
+            {/* Inputs */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <Input
+                label="Supabase Project URL"
+                value={supabaseUrl}
+                onChange={(e) => setSupabaseUrl(e.target.value)}
+                placeholder="https://baciicxeyqvjmbfgcjbm.supabase.co"
+                icon={<Server size={15} />}
+              />
+              <Input
+                label="Supabase Anon Key (Public)"
+                type="password"
+                value={supabaseKey}
+                onChange={(e) => setSupabaseKey(e.target.value)}
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                icon={<Key size={15} />}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
+                Find your Anon Key in: <strong>Supabase Dashboard &gt; Project Settings &gt; API &gt; Project API keys (anon public)</strong>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <Button
+                  variant="outlined"
+                  size="sm"
+                  icon={<RotateCcw size={13} />}
+                  onClick={handleResetData}
+                  isLoading={reseedLoading}
+                  title="Clear all stored data to 0"
+                >
+                  Clear All Data to 0
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<CheckCircle size={14} color="#FFFFFF" />}
+                  onClick={handleSaveSupabase}
+                >
+                  Save Supabase Settings
+                </Button>
+              </div>
+            </div>
+
+            {supabaseFeedback && (
+              <div style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: supabaseStatus === 'error' ? 'var(--color-danger)' : 'var(--color-success)',
+                padding: '8px 12px',
+                backgroundColor: supabaseStatus === 'error' ? 'var(--color-danger-bg)' : '#dcfce7',
+                borderRadius: 'var(--radius-md)',
+                border: `1px solid ${supabaseStatus === 'error' ? '#fca5a5' : '#86efac'}`,
+              }}>
+                {supabaseFeedback}
+              </div>
+            )}
           </div>
         </Card>
       </div>

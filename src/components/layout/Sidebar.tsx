@@ -11,7 +11,6 @@ import {
   ReceiptText,
   BarChart3,
   Settings,
-  Sparkles,
   LogOut,
   UserCheck,
 } from 'lucide-react';
@@ -71,50 +70,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNewSaleClick }) => {
       {/* Brand Header */}
       <div
         style={{
-          padding: '24px 20px 20px 20px',
+          padding: '20px 18px',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
+          justifyContent: 'center',
           borderBottom: '1px solid var(--color-neutral-250)',
+          minHeight: '74px',
+          boxSizing: 'border-box',
         }}
       >
-        <div
+        <img
+          src="/garhwal-lights-logo-landscape-trns.png"
+          alt="Garhwal Lights"
           style={{
-            width: '42px',
-            height: '42px',
-            borderRadius: '50%',
-            backgroundColor: 'var(--color-primary-800)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#FFFFFF',
-            boxShadow: '0 4px 10px rgba(6, 77, 61, 0.2)',
-            flexShrink: 0,
+            maxWidth: '100%',
+            height: '46px',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.05))',
           }}
-        >
-          <Sparkles size={22} color="var(--color-tertiary-500)" />
-        </div>
-        <div>
-          <h1
-            style={{
-              fontSize: '16px',
-              fontWeight: 800,
-              color: 'var(--color-neutral-900)',
-              lineHeight: 1.2,
-            }}
-          >
-            Garhwal Lights
-          </h1>
-          <p
-            style={{
-              fontSize: '12px',
-              fontWeight: 500,
-              color: 'var(--color-neutral-500)',
-            }}
-          >
-            Retail & Showroom
-          </p>
-        </div>
+        />
       </div>
 
       {/* Navigation List */}

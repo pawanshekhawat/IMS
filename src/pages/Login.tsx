@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Lock, User, Eye, EyeOff, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 
@@ -44,12 +44,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleQuickFill = (user: string, pass: string) => {
-    setUsername(user);
-    setPassword(pass);
-    setError(null);
-  };
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -73,27 +67,28 @@ export const Login: React.FC = () => {
         {/* Top Decorative Brand Bar */}
         <div style={{
           backgroundColor: 'var(--color-primary-800)',
-          padding: '32px 28px 24px',
+          padding: '28px 24px 22px',
           color: '#FFFFFF',
           textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
         }}>
-          <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(255, 255, 255, 0.12)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: '14px',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-          }}>
-            <Sparkles size={28} color="var(--color-tertiary-500)" />
-          </div>
-          <h1 style={{ fontSize: '22px', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
+          <img
+            src="/garhwal-lights-logo-trns.png"
+            alt="Garhwal Lights"
+            style={{
+              height: '72px',
+              maxWidth: '180px',
+              objectFit: 'contain',
+              marginBottom: '10px',
+              filter: 'drop-shadow(0 4px 10px rgba(0, 0, 0, 0.25))',
+            }}
+          />
+          <h1 style={{ fontSize: '20px', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', color: '#FFFFFF' }}>
             Garhwal Lights
           </h1>
-          <p style={{ fontSize: '13px', color: 'var(--color-primary-100)', marginTop: '4px', margin: '4px 0 0' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-primary-100)', marginTop: '4px', margin: '4px 0 0' }}>
             Retail Showroom • Shivam Heights, Sikar
           </p>
         </div>
@@ -232,73 +227,6 @@ export const Login: React.FC = () => {
               </Button>
             </div>
           </form>
-
-          {/* One-Click Quick Fill Helper */}
-          <div style={{
-            marginTop: '26px',
-            paddingTop: '20px',
-            borderTop: '1px solid var(--color-neutral-250)',
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginBottom: '10px',
-              fontSize: '11px',
-              fontWeight: 700,
-              color: 'var(--color-neutral-600)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-            }}>
-              <ShieldCheck size={14} color="var(--color-primary-800)" />
-              <span>Quick Login:</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('admin', 'admin123')}
-                style={{
-                  padding: '8px 10px',
-                  backgroundColor: 'var(--color-neutral-150)',
-                  border: '1px solid var(--color-neutral-300)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: 'var(--color-neutral-800)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background-color 0.15s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-neutral-250)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-neutral-150)'}
-              >
-                <div style={{ fontWeight: 700, color: 'var(--color-primary-900)' }}>Admin</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>Full Showroom Access</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickFill('staff', 'staff123')}
-                style={{
-                  padding: '8px 10px',
-                  backgroundColor: 'var(--color-neutral-150)',
-                  border: '1px solid var(--color-neutral-300)',
-                  borderRadius: 'var(--radius-md)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  color: 'var(--color-neutral-800)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background-color 0.15s',
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-neutral-250)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-neutral-150)'}
-              >
-                <div style={{ fontWeight: 700, color: 'var(--color-neutral-900)' }}>Staff</div>
-                <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>Billing & Counter POS</div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

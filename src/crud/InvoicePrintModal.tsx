@@ -168,9 +168,11 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
             {/* Header / Store details */}
             <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #064D3D', paddingBottom: '16px' }}>
               <div>
-                <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#064D3D', letterSpacing: '-0.02em', margin: 0 }}>
-                  {storeProfile.name ? storeProfile.name.toUpperCase() : 'GARHWAL LIGHTS'}
-                </h1>
+                <img
+                  src="/garhwal-lights-logo-landscape-trns.png"
+                  alt="Garhwal Lights"
+                  style={{ height: '42px', objectFit: 'contain', marginBottom: '6px' }}
+                />
                 <p style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563', margin: '2px 0 0 0' }}>
                   {storeProfile.tagline || 'Architectural & Decorative Lighting Showroom'}
                 </p>
