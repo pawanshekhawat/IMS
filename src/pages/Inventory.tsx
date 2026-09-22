@@ -228,12 +228,6 @@ export const Inventory: React.FC = () => {
       <Header
         title="Inventory & Stock Management"
         subtitle="Live warehouse stock tracking, threshold warnings, and movement audit log"
-        quickActionLabel="Adjust Stock"
-        onQuickAction={() => {
-          if (filteredProducts.length > 0) {
-            setSelectedProductForAdjust(filteredProducts[0]);
-          }
-        }}
         onSearch={setSearchQuery}
         outOfStockCount={outCount}
         lowStockCount={lowCount}
