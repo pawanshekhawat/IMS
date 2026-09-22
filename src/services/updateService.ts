@@ -18,8 +18,12 @@ export type ProgressCallback = (progress: {
 }) => void;
 
 class UpdateService {
+  public getCurrentVersion(): string {
+    return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
+  }
+
   public async checkForUpdates(): Promise<UpdateInfo> {
-    const currentVersion = '1.0.0';
+    const currentVersion = this.getCurrentVersion();
 
     if (isTauri()) {
       try {

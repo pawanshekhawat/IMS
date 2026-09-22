@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:desktop": "tauri build --bundles nsis",
+    "release": "node scripts/release.js",
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri"

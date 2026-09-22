@@ -182,7 +182,7 @@ export const Settings: React.FC = () => {
                     Garhwal Lights IMS Desktop
                   </span>
                   <Badge variant={updateStatus === 'available' ? 'warning' : 'success'}>
-                    Version 1.0.0 {updateStatus === 'available' ? '• Update Available' : '(Latest)'}
+                    Version {updateService.getCurrentVersion()} {updateStatus === 'available' ? '• Update Available' : '(Latest)'}
                   </Badge>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--color-neutral-500)', marginTop: '4px' }}>
