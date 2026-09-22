@@ -4,7 +4,11 @@ import {
   CheckCircle, 
   RotateCcw,
   Store,
-  Database
+  Database,
+  Download,
+  AlertCircle,
+  ArrowUpCircle,
+  Sparkles,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
@@ -13,9 +17,13 @@ import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
 import { dataService } from '../services/dataService';
 import { authService } from '../services/authService';
+import { updateService, type UpdateInfo } from '../services/updateService';
 
 export const Settings: React.FC = () => {
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'latest' | 'available'>('idle');
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'ready' | 'error'>('idle');
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [reseedLoading, setReseedLoading] = useState(false);
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
@@ -67,11 +75,48 @@ export const Settings: React.FC = () => {
   });
   const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const handleCheckUpdates = () => {
+  const handleCheckUpdates = async () => {
     setUpdateStatus('checking');
-    setTimeout(() => {
-      setUpdateStatus('latest');
-    }, 1500);
+    setUpdateError(null);
+    try {
+      const info = await updateService.checkForUpdates();
+      setUpdateInfo(info);
+      if (info.available) {
+        setUpdateStatus('available');
+      } else {
+        setUpdateStatus('latest');
+      }
+    } catch (err: any) {
+      setUpdateStatus('error');
+      setUpdateError(err?.message || 'Failed to check for updates from GitHub');
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!updateInfo?.rawUpdate) {
+      window.open('https://github.com/pawanshekhawat/IMS/releases', '_blank');
+      return;
+    }
+    setUpdateStatus('downloading');
+    setDownloadProgress(0);
+    setUpdateError(null);
+    try {
+      await updateService.downloadAndInstall(updateInfo.rawUpdate, (p) => {
+        setDownloadProgress(p.percent);
+      });
+      setUpdateStatus('ready');
+    } catch (err: any) {
+      setUpdateStatus('error');
+      setUpdateError(err?.message || 'Failed to download and install update');
+    }
+  };
+
+  const handleRelaunch = async () => {
+    try {
+      await updateService.relaunch();
+    } catch (err: any) {
+      alert('Please restart the application manually: ' + (err?.message || ''));
+    }
   };
 
   const handleSaveStoreProfile = (e: React.FormEvent) => {
@@ -108,7 +153,7 @@ export const Settings: React.FC = () => {
         {/* 1. OTA Desktop App Updates */}
         <Card
           title="🚀 Over-The-Air (OTA) App Updates"
-          subtitle="Tauri auto-updater distributes zero-lag executable updates directly to client desktop machines"
+          subtitle="Tauri auto-updater distributes zero-lag executable updates directly across client machines via GitHub Releases"
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{
@@ -127,10 +172,12 @@ export const Settings: React.FC = () => {
                   <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
                     Garhwal Lights IMS Desktop
                   </span>
-                  <Badge variant="success">Version 1.0.0 (Latest)</Badge>
+                  <Badge variant={updateStatus === 'available' ? 'warning' : 'success'}>
+                    Version 1.0.0 {updateStatus === 'available' ? '• Update Available' : '(Latest)'}
+                  </Badge>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--color-neutral-500)', marginTop: '4px' }}>
-                  Channel: Stable Production • Runtime: Tauri Native WebView2 (Offline-First Zero Lag)
+                  Channel: GitHub Releases Stable • Endpoint: pawanshekhawat/IMS
                 </p>
               </div>
 
@@ -138,12 +185,124 @@ export const Settings: React.FC = () => {
                 variant="primary"
                 icon={<RefreshCw size={15} color="#FFFFFF" className={updateStatus === 'checking' ? 'animate-spin' : ''} />}
                 onClick={handleCheckUpdates}
-                disabled={updateStatus === 'checking'}
+                disabled={updateStatus === 'checking' || updateStatus === 'downloading'}
               >
-                {updateStatus === 'checking' ? 'Checking for updates...' : 'Check for Updates'}
+                {updateStatus === 'checking' ? 'Connecting to GitHub...' : 'Check for Updates'}
               </Button>
             </div>
 
+            {/* Update Available Banner & Action */}
+            {updateStatus === 'available' && updateInfo && (
+              <div style={{
+                padding: '18px 20px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--color-warning-bg)',
+                border: '1px solid #fcd34d',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={18} color="var(--color-warning)" />
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--color-warning)' }}>
+                      New Version v{updateInfo.latestVersion} Available!
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-neutral-600)' }}>
+                      (You are running v{updateInfo.currentVersion})
+                    </span>
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<Download size={14} color="#FFFFFF" />}
+                    onClick={handleInstallUpdate}
+                  >
+                    Download & Install Update
+                  </Button>
+                </div>
+
+                {updateInfo.notes && (
+                  <div style={{
+                    padding: '12px 14px',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--color-neutral-300)',
+                    fontSize: '12px',
+                    color: 'var(--color-neutral-700)',
+                    lineHeight: 1.5,
+                  }}>
+                    <div style={{ fontWeight: 700, marginBottom: '4px', color: 'var(--color-neutral-900)' }}>Release Notes:</div>
+                    {updateInfo.notes}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Downloading Progress Bar */}
+            {updateStatus === 'downloading' && (
+              <div style={{
+                padding: '16px 20px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--color-neutral-100)',
+                border: '1px solid var(--color-neutral-300)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, color: 'var(--color-neutral-800)' }}>
+                  <span>Downloading update package from GitHub Releases...</span>
+                  <span>{downloadProgress}%</span>
+                </div>
+                <div style={{
+                  width: '100%',
+                  height: '8px',
+                  backgroundColor: 'var(--color-neutral-250)',
+                  borderRadius: '9999px',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${downloadProgress}%`,
+                    backgroundColor: 'var(--color-primary-800)',
+                    transition: 'width 0.2s ease',
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {/* Ready to Relaunch Banner */}
+            {updateStatus === 'ready' && (
+              <div style={{
+                padding: '16px 20px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: '#dcfce7',
+                border: '1px solid #86efac',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle size={18} color="var(--color-success)" />
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-success)' }}>
+                    Update successfully downloaded and verified! Relaunch application to finish.
+                  </span>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<ArrowUpCircle size={15} color="#FFFFFF" />}
+                  onClick={handleRelaunch}
+                >
+                  Relaunch Application Now
+                </Button>
+              </div>
+            )}
+
+            {/* Already Up to Date Message */}
             {updateStatus === 'latest' && (
               <div style={{
                 padding: '12px 16px',
@@ -158,6 +317,24 @@ export const Settings: React.FC = () => {
               }}>
                 <CheckCircle size={16} />
                 Your Garhwal Lights Desktop App is up to date! (v1.0.0)
+              </div>
+            )}
+
+            {/* Error Message */}
+            {updateStatus === 'error' && updateError && (
+              <div style={{
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'var(--color-danger-bg)',
+                color: 'var(--color-danger)',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}>
+                <AlertCircle size={16} />
+                <span>{updateError}</span>
               </div>
             )}
           </div>
