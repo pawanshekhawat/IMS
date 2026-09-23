@@ -4,6 +4,7 @@ import { rateLimiter } from './rateLimiter';
 
 const STAFF_SESSION_KEY = 'gl_ims_staff_session';
 const ADMIN_SESSION_KEY = 'gl_ims_admin_session';
+const ADMIN_TIMEOUT_KEY = 'gl_ims_admin_timeout_mins';
 
 // Clean up any legacy local account credentials from browser storage
 try {
@@ -13,6 +14,47 @@ try {
 }
 
 class AuthService {
+  public getAdminTimeoutMinutes(): number {
+    try {
+      const stored = localStorage.getItem(ADMIN_TIMEOUT_KEY);
+      if (stored) {
+        const val = parseInt(stored, 10);
+        if (!isNaN(val) && val > 0) return val;
+      }
+    } catch {
+      // ignore
+    }
+    return 60; // Default 1 hour (60 minutes)
+  }
+
+  public setAdminTimeoutMinutes(mins: number): void {
+    const validMins = Math.max(1, Math.round(mins));
+    try {
+      localStorage.setItem(ADMIN_TIMEOUT_KEY, String(validMins));
+    } catch {
+      // ignore
+    }
+
+    // If there is an active admin session, adjust its expiration
+    const active = this.getActiveSession();
+    if (active && active.role === 'admin') {
+      active.timeoutMinutes = validMins;
+      active.expiresAt = Date.now() + validMins * 60 * 1000;
+      this.persistSession(active);
+    }
+  }
+
+  public extendAdminSession(extraMinutes?: number): UserSession | null {
+    const active = this.getActiveSession();
+    if (active && active.role === 'admin') {
+      const mins = extraMinutes || active.timeoutMinutes || this.getAdminTimeoutMinutes();
+      active.expiresAt = Date.now() + mins * 60 * 1000;
+      this.persistSession(active);
+      return active;
+    }
+    return null;
+  }
+
   public async updatePassword(username: string, newPassword: string): Promise<boolean> {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = newPassword.trim();
@@ -58,19 +100,7 @@ class AuthService {
     const active = this.getActiveSession();
     if (active && active.username.toLowerCase() === cleanUsername) {
       active.displayName = cleanName;
-      if (active.role === 'staff') {
-        try {
-          localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(active));
-        } catch {
-          // ignore
-        }
-      } else {
-        try {
-          sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(active));
-        } catch {
-          // ignore
-        }
-      }
+      this.persistSession(active);
     }
 
     return true;
@@ -141,12 +171,18 @@ class AuthService {
       // Successful authentication: clear any failed attempt history
       rateLimiter.recordSuccessfulLogin(cleanUsername);
 
+      // Determine timeout for admin session
+      const timeoutMinutes = data.role === 'admin' ? this.getAdminTimeoutMinutes() : undefined;
+      const expiresAt = timeoutMinutes ? Date.now() + timeoutMinutes * 60 * 1000 : undefined;
+
       const session: UserSession = {
         id: data.id,
         username: data.username,
         displayName: data.display_name || (data.role === 'admin' ? 'Owner' : 'Showroom Billing Staff'),
         role: data.role as 'admin' | 'staff',
         loginTime: new Date().toISOString(),
+        timeoutMinutes,
+        expiresAt,
       };
 
       this.persistSession(session);
@@ -164,14 +200,16 @@ class AuthService {
     if (session.role === 'staff') {
       try {
         localStorage.setItem(STAFF_SESSION_KEY, JSON.stringify(session));
+        localStorage.removeItem(ADMIN_SESSION_KEY);
         sessionStorage.removeItem(ADMIN_SESSION_KEY);
       } catch (e) {
         console.error('Error saving staff session', e);
       }
     } else {
       try {
-        sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
+        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
         localStorage.removeItem(STAFF_SESSION_KEY);
+        sessionStorage.removeItem(ADMIN_SESSION_KEY);
       } catch (e) {
         console.error('Error saving admin session', e);
       }
@@ -179,11 +217,19 @@ class AuthService {
   }
 
   public getActiveSession(): UserSession | null {
-    // 1. Check if admin session is active in current session
+    // 1. Check if admin session is active in localStorage (with 1-hour expiration check)
     try {
-      const adminData = sessionStorage.getItem(ADMIN_SESSION_KEY);
+      const adminData = localStorage.getItem(ADMIN_SESSION_KEY) || sessionStorage.getItem(ADMIN_SESSION_KEY);
       if (adminData) {
-        return JSON.parse(adminData) as UserSession;
+        const session = JSON.parse(adminData) as UserSession;
+        // Check if admin session has timed out (default 1 hr or custom timer)
+        if (session.expiresAt && Date.now() > session.expiresAt) {
+          console.warn('Admin session has expired (auto-logout timer elapsed).');
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+          sessionStorage.removeItem(ADMIN_SESSION_KEY);
+          return null;
+        }
+        return session;
       }
     } catch {
       // ignore
@@ -208,6 +254,7 @@ class AuthService {
 
   public logout(): void {
     try {
+      localStorage.removeItem(ADMIN_SESSION_KEY);
       sessionStorage.removeItem(ADMIN_SESSION_KEY);
       localStorage.removeItem(STAFF_SESSION_KEY);
     } catch (e) {

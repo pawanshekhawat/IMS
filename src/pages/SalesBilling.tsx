@@ -19,8 +19,10 @@ import { dataService } from '../services/dataService';
 import type { Product, Customer, Sale, SaleItem } from '../types';
 import { SaleCheckoutModal } from '../crud/SaleCheckoutModal';
 import { InvoicePrintModal } from '../crud/InvoicePrintModal';
+import { useAuth } from '../context/AuthContext';
 
 export const SalesBilling: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -187,9 +189,9 @@ export const SalesBilling: React.FC = () => {
       align: 'center',
     },
     {
-      header: 'Print / View',
+      header: 'Actions',
       accessor: (s) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
           <Button
             variant="outlined"
             size="sm"
@@ -198,11 +200,36 @@ export const SalesBilling: React.FC = () => {
           >
             Invoice
           </Button>
+          {isAdmin && (
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 size={13} />}
+              onClick={() => handleDeleteSale(s)}
+              title="Delete Invoice & Restore Inventory"
+            >
+              Delete
+            </Button>
+          )}
         </div>
       ),
       align: 'right',
     },
   ];
+
+  const handleDeleteSale = async (sale: Sale) => {
+    const confirmMsg = `Are you sure you want to delete invoice #${sale.invoiceNumber} (₹${sale.grandTotal.toLocaleString('en-IN')}) for ${sale.customerName}?\n\nThis will remove the sales invoice & profit records, and restore the sold items back to inventory.`;
+    if (window.confirm(confirmMsg)) {
+      setSalesHistory(prev => prev.filter(s => s.id !== sale.id));
+      try {
+        await dataService.deleteSale(sale.id, true);
+        await loadData();
+      } catch (err: any) {
+        alert(err?.message || 'Failed to delete invoice');
+        await loadData();
+      }
+    }
+  };
 
   return (
     <>

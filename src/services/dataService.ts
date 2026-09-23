@@ -45,6 +45,7 @@ export interface IDataService {
   getSales(forceRefresh?: boolean): Promise<Sale[]>;
   getSaleById(id: string): Promise<Sale | undefined>;
   createSale(saleData: Omit<Sale, 'id' | 'createdAt' | 'invoiceNumber'>): Promise<Sale>;
+  deleteSale(id: string, restoreInventory?: boolean): Promise<void>;
 
   // Purchases
   getPurchases(forceRefresh?: boolean): Promise<Purchase[]>;
@@ -685,6 +686,77 @@ class SupabaseDataServiceImpl implements IDataService {
     return sale;
   }
 
+  async deleteSale(id: string, restoreInventory: boolean = true): Promise<void> {
+    this.ensureAdminRole('delete sales invoices and profit records');
+    // Rate limit: max 15 invoice deletions per 30 seconds
+    rateLimiter.enforceLimit('delete_sale_limit', 15, 30 * 1000, 'delete sales invoices');
+
+    const sale = await this.getSaleById(id);
+    if (!sale) {
+      throw new Error(`Invoice with ID ${id} not found in cloud database.`);
+    }
+
+    // 1. Optionally restore inventory for items sold on this invoice
+    if (restoreInventory && sale.items && sale.items.length > 0) {
+      for (const item of sale.items) {
+        try {
+          await this.adjustStock(
+            item.productId,
+            item.quantity,
+            'IN',
+            `Restored from deleted invoice #${sale.invoiceNumber}`
+          );
+        } catch (stockErr) {
+          console.warn(`Could not restore stock for product ${item.productId}:`, stockErr);
+        }
+      }
+    }
+
+    // 2. If sale was billed to customer, reverse customer total purchases & balance
+    if (sale.customerId) {
+      try {
+        const customer = this.cache.customers?.find(c => c.id === sale.customerId) || await (async () => {
+          const supabase = getRequiredSupabase();
+          const { data: custRow } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('id', sale.customerId)
+            .maybeSingle();
+          return custRow ? this.mapCustomerFromDb(custRow) : null;
+        })();
+
+        if (customer) {
+          const newTotalPurchases = Math.max(0, customer.totalPurchases - sale.grandTotal);
+          const newOutstanding = sale.paymentStatus === 'Pending'
+            ? Math.max(0, customer.outstandingBalance - sale.grandTotal)
+            : customer.outstandingBalance;
+
+          await this.updateCustomer(customer.id, {
+            totalPurchases: newTotalPurchases,
+            outstandingBalance: newOutstanding,
+          });
+        }
+      } catch (custErr) {
+        console.warn('Could not reverse customer balance on sale deletion:', custErr);
+      }
+    }
+
+    // 3. Remove immediately from local memory cache
+    const prevSales = this.cache.sales;
+    if (this.cache.sales) {
+      this.cache.sales = this.cache.sales.filter(s => s.id !== id);
+    }
+
+    // 4. Delete sale record from Supabase cloud database
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('sales').delete().eq('id', id);
+    if (error) {
+      this.cache.sales = prevSales;
+      console.error('Supabase deleteSale error:', error);
+      throw new Error(`Failed to delete invoice from cloud database: ${error.message}`);
+    }
+  }
+
   // ==========================================
   // PURCHASES (INWARD STOCK - Admin Only + In-Memory Cache)
   // ==========================================
@@ -948,7 +1020,11 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load stock movements from cloud database: ${error.message}`);
     }
 
-    const list = (data || []).map(m => this.mapMovementFromDb(m));
+    const products = await this.getProducts();
+    const validProductIds = new Set(products.map(p => p.id));
+    const list = (data || [])
+      .filter(m => validProductIds.has(m.product_id))
+      .map(m => this.mapMovementFromDb(m));
     this.cache.stockMovements = list;
     return [...list];
   }

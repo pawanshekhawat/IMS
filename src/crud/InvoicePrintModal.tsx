@@ -166,12 +166,12 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
             backgroundColor: '#FFFFFF',
           }}>
             {/* Header / Store details */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #064D3D', paddingBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #064D3D', paddingBottom: '16px' }}>
               <div>
                 <img
                   src="/garhwal-lights-logo-landscape-trns.png"
                   alt="Garhwal Lights"
-                  style={{ height: '42px', objectFit: 'contain', marginBottom: '6px' }}
+                  style={{ height: '78px', maxWidth: '280px', objectFit: 'contain', display: 'block', marginBottom: '6px' }}
                 />
                 <p style={{ fontSize: '12px', fontWeight: 600, color: '#4B5563', margin: '2px 0 0 0' }}>
                   {storeProfile.tagline || 'Architectural & Decorative Lighting Showroom'}
@@ -304,14 +304,15 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
             <div style={{ marginTop: '36px', paddingTop: '16px', borderTop: '1px dashed #D1D5DB', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
               <div style={{ maxWidth: '400px', fontSize: '10px', color: '#6B7280' }}>
                 <p style={{ fontWeight: 700, margin: '0 0 2px 0' }}>Terms & Conditions:</p>
-                <p style={{ margin: 0 }}>1. Goods once sold can only be exchanged within 7 days in original condition.</p>
+                <p style={{ margin: 0 }}>1. Goods once sold can be returned or exchanged within 2 months in original condition.</p>
                 <p style={{ margin: 0 }}>2. 1-2 Year Manufacturer Warranty on LED drivers, downlights & strip lights.</p>
                 <p style={{ margin: 0 }}>3. Subject to Sikar Jurisdiction.</p>
               </div>
 
               <div style={{ textAlign: 'center' }}>
-                <div style={{ width: '140px', height: '40px', borderBottom: '1px solid #111827', margin: '0 auto 4px auto' }} />
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151' }}>For {storeProfile.name || 'Garhwal Lights'}</span>
+                <div style={{ width: '150px', height: '40px', borderBottom: '1px solid #111827', margin: '0 auto 4px auto' }} />
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block' }}>For {storeProfile.name || 'Garhwal Lights'}</span>
+                <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>Retail Showroom</span>
               </div>
             </div>
           </div>
@@ -373,7 +374,8 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
             <div style={{ textAlign: 'center', marginTop: '18px', fontSize: '11px', borderTop: '1px dashed #D1D5DB', paddingTop: '10px' }}>
               <p style={{ margin: 0, fontWeight: 700 }}>Thank you for lighting your home with us!</p>
-              <p style={{ margin: '2px 0 0 0', color: '#6B7280' }}>Please Visit Again</p>
+              <p style={{ margin: '2px 0 0 0', color: '#6B7280' }}>Return & Exchange Valid for 2 Months</p>
+              <p style={{ margin: '2px 0 0 0', color: '#9CA3AF', fontSize: '10px' }}>Please Visit Again</p>
             </div>
           </div>
         )}

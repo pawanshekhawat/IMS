@@ -12,6 +12,8 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Clock,
+  Timer,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
@@ -23,12 +25,57 @@ import { authService } from '../services/authService';
 import { updateService, type UpdateInfo } from '../services/updateService';
 
 export const Settings: React.FC = () => {
-  const { user, updateDisplayName } = useAuth();
+  const { user, updateDisplayName, extendSession, sessionRemainingMs } = useAuth();
   const [adminDisplayName, setAdminDisplayName] = useState(
     user?.displayName || 'Himanshu Choudhary (Owner)'
   );
   const [nameSaving, setNameSaving] = useState(false);
   const [nameFeedback, setNameFeedback] = useState<string | null>(null);
+
+  // Admin Auto-Logout / Session Timeout State
+  const [adminTimeoutMins, setAdminTimeoutMins] = useState<number>(() => {
+    return authService.getAdminTimeoutMinutes();
+  });
+  const [customTimeoutInput, setCustomTimeoutInput] = useState<string>(String(authService.getAdminTimeoutMinutes()));
+  const [timeoutFeedback, setTimeoutFeedback] = useState<string | null>(null);
+
+  const handleSetTimeout = (mins: number) => {
+    authService.setAdminTimeoutMinutes(mins);
+    setAdminTimeoutMins(mins);
+    setCustomTimeoutInput(String(mins));
+    const label = mins >= 60 && mins % 60 === 0 
+      ? `${mins / 60} hour${mins / 60 > 1 ? 's' : ''}` 
+      : `${mins} minute${mins > 1 ? 's' : ''}`;
+    setTimeoutFeedback(`Admin auto-logout set to ${label}. Your session will automatically close after this time.`);
+    setTimeout(() => setTimeoutFeedback(null), 5000);
+  };
+
+  const handleCustomTimeoutSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = parseInt(customTimeoutInput, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      handleSetTimeout(parsed);
+    }
+  };
+
+  const handleExtendSession = () => {
+    extendSession(60);
+    setTimeoutFeedback('Admin session successfully renewed and extended by 1 hour!');
+    setTimeout(() => setTimeoutFeedback(null), 4000);
+  };
+
+  const formatRemainingTime = (ms: number | null) => {
+    if (ms === null) return 'Active';
+    if (ms <= 0) return 'Session Expired';
+    const totalSecs = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    if (hours > 0) {
+      return `${hours}h ${mins}m ${secs}s`;
+    }
+    return `${mins}m ${secs}s`;
+  };
 
   useEffect(() => {
     if (user?.displayName) {
@@ -688,6 +735,141 @@ export const Settings: React.FC = () => {
                     </div>
                   )}
                 </form>
+              </div>
+
+              {/* Box 3: Admin Session Timeout & Auto Logout Timer */}
+              <div style={{
+                padding: '18px 20px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--color-neutral-200)',
+                border: '1px solid var(--color-neutral-300)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
+                      Auto-Logout & Session Timer
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
+                      Logs out admin after 1 hour or your custom duration
+                    </div>
+                  </div>
+                  <Badge variant="warning">
+                    <Clock size={12} style={{ marginRight: '4px', verticalAlign: '-1px' }} />
+                    {adminTimeoutMins >= 60 && adminTimeoutMins % 60 === 0 
+                      ? `${adminTimeoutMins / 60} Hour${adminTimeoutMins / 60 > 1 ? 's' : ''}` 
+                      : `${adminTimeoutMins} Mins`}
+                  </Badge>
+                </div>
+
+                {/* Active Session Countdown Info */}
+                <div style={{
+                  padding: '10px 14px',
+                  backgroundColor: 'var(--color-neutral-100)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-neutral-300)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Timer size={16} color="var(--color-primary-800)" />
+                    <span style={{ fontSize: '12px', color: 'var(--color-neutral-700)' }}>
+                      Session remaining: <strong>{formatRemainingTime(sessionRemainingMs)}</strong>
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outlined"
+                    onClick={handleExtendSession}
+                    style={{ fontSize: '11px', padding: '4px 10px', height: '28px' }}
+                  >
+                    +1 Hr Extend
+                  </Button>
+                </div>
+
+                {/* Preset Time Buttons */}
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-neutral-600)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Quick Presets:
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {[
+                      { label: '15 Mins', val: 15 },
+                      { label: '30 Mins', val: 30 },
+                      { label: '1 Hour (Default)', val: 60 },
+                      { label: '2 Hours', val: 120 },
+                      { label: '4 Hours', val: 240 },
+                      { label: '8 Hours', val: 480 },
+                      { label: '24 Hours', val: 1440 },
+                    ].map((p) => {
+                      const isSelected = adminTimeoutMins === p.val;
+                      return (
+                        <button
+                          key={p.val}
+                          type="button"
+                          onClick={() => handleSetTimeout(p.val)}
+                          style={{
+                            padding: '6px 10px',
+                            borderRadius: 'var(--radius-md)',
+                            border: `1.5px solid ${isSelected ? 'var(--color-primary-800)' : 'var(--color-neutral-300)'}`,
+                            backgroundColor: isSelected ? 'var(--color-primary-800)' : 'var(--color-neutral-100)',
+                            color: isSelected ? '#FFFFFF' : 'var(--color-neutral-800)',
+                            fontSize: '11px',
+                            fontWeight: isSelected ? 700 : 500,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Minutes Input */}
+                <form onSubmit={handleCustomTimeoutSubmit} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10080}
+                      placeholder="Custom duration in minutes"
+                      value={customTimeoutInput}
+                      onChange={(e) => setCustomTimeoutInput(e.target.value)}
+                      className="input-base"
+                      style={{ width: '100%', height: '36px', fontSize: '12px', paddingLeft: '32px' }}
+                    />
+                    <Clock size={14} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    type="submit"
+                    disabled={!customTimeoutInput.trim() || parseInt(customTimeoutInput, 10) === adminTimeoutMins}
+                    style={{ height: '36px' }}
+                  >
+                    Set Custom
+                  </Button>
+                </form>
+
+                {timeoutFeedback && (
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: 'var(--color-success)',
+                    padding: '8px 12px',
+                    backgroundColor: '#dcfce7',
+                    borderRadius: 'var(--radius-md)',
+                  }}>
+                    ✓ {timeoutFeedback}
+                  </div>
+                )}
               </div>
             </div>
           </div>
