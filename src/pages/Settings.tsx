@@ -37,11 +37,16 @@ export const Settings: React.FC = () => {
     const trimmed = adminDisplayName.trim();
     if (!trimmed) return;
     setNameSaving(true);
-    const ok = await updateDisplayName(trimmed);
-    setNameSaving(false);
-    if (ok) {
-      setNameFeedback('Administrator name updated successfully!');
-      setTimeout(() => setNameFeedback(null), 4000);
+    try {
+      const ok = await updateDisplayName(trimmed);
+      setNameSaving(false);
+      if (ok) {
+        setNameFeedback('Administrator name updated successfully in Supabase cloud!');
+        setTimeout(() => setNameFeedback(null), 4000);
+      }
+    } catch (err: any) {
+      setNameSaving(false);
+      alert(err?.message || 'Failed to update name in Supabase');
     }
   };
 
@@ -63,11 +68,15 @@ export const Settings: React.FC = () => {
 
   const handleUpdateStaffPassword = async () => {
     if (!newStaffPassword.trim()) return;
-    const ok = await authService.updatePassword('staff', newStaffPassword.trim());
-    if (ok) {
-      setPasswordFeedback('Staff password updated successfully!');
-      setNewStaffPassword('');
-      setTimeout(() => setPasswordFeedback(null), 4000);
+    try {
+      const ok = await authService.updatePassword('staff', newStaffPassword.trim());
+      if (ok) {
+        setPasswordFeedback('Staff password updated successfully in Supabase cloud!');
+        setNewStaffPassword('');
+        setTimeout(() => setPasswordFeedback(null), 4000);
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to update staff password in Supabase');
     }
   };
   const defaultStoreInfo = {

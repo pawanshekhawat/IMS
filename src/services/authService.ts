@@ -1,105 +1,31 @@
-import type { UserAccount, UserSession } from '../types';
-import { getSupabase } from './supabaseClient';
+import type { UserSession } from '../types';
+import { getRequiredSupabase } from './supabaseClient';
 
-const ACCOUNTS_STORAGE_KEY = 'gl_ims_user_accounts';
 const STAFF_SESSION_KEY = 'gl_ims_staff_session';
 const ADMIN_SESSION_KEY = 'gl_ims_admin_session';
 
-// Defaults read dynamically from .env with standard fallbacks
-const getEnvDefaultAccounts = (): UserAccount[] => [
-  {
-    id: 'user_admin_01',
-    username: (import.meta.env.VITE_ADMIN_ID || 'admin').trim().toLowerCase(),
-    passwordHash: (import.meta.env.VITE_ADMIN_PASSWORD || 'admin123').trim(),
-    displayName: (import.meta.env.VITE_ADMIN_NAME || '(Owner)').trim(),
-    role: 'admin',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'user_staff_01',
-    username: (import.meta.env.VITE_STAFF_ID || 'staff').trim().toLowerCase(),
-    passwordHash: (import.meta.env.VITE_STAFF_PASSWORD || 'staff123').trim(),
-    displayName: 'Showroom Billing Staff',
-    role: 'staff',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-];
+// Clean up any legacy local account credentials from browser storage
+try {
+  localStorage.removeItem('gl_ims_user_accounts');
+} catch {
+  // ignore
+}
 
 class AuthService {
-  private getStoredAccounts(): UserAccount[] {
-    const defaults = getEnvDefaultAccounts();
-    try {
-      const data = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-      if (data) {
-        const accounts: UserAccount[] = JSON.parse(data);
-        if (Array.isArray(accounts) && accounts.length > 0) {
-          let hasChanges = false;
-          // Merge with any env overrides if usernames match, migrate legacy names
-          const migrated = accounts.map(acc => {
-            const matchedEnv = defaults.find(d => d.role === acc.role);
-            let updatedDisplayName = acc.displayName;
-            if (updatedDisplayName && updatedDisplayName.toLowerCase().includes('pawan')) {
-              updatedDisplayName = defaults.find(d => d.role === 'admin')?.displayName || 'Himanshu Choudhary (Owner)';
-              hasChanges = true;
-            }
-            if (matchedEnv) {
-              return {
-                ...acc,
-                username: acc.username || matchedEnv.username,
-                passwordHash: acc.passwordHash || matchedEnv.passwordHash,
-                displayName: updatedDisplayName || matchedEnv.displayName,
-              };
-            }
-            return {
-              ...acc,
-              displayName: updatedDisplayName || acc.displayName,
-            };
-          });
-          if (hasChanges) {
-            this.saveAccounts(migrated);
-          }
-          return migrated;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    this.saveAccounts(defaults);
-    return defaults;
-  }
-
-  private saveAccounts(accounts: UserAccount[]): void {
-    try {
-      localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
-    } catch (err) {
-      console.error('Failed to save accounts to localStorage', err);
-    }
-  }
-
-  public getAccounts(): UserAccount[] {
-    return this.getStoredAccounts();
-  }
-
   public async updatePassword(username: string, newPassword: string): Promise<boolean> {
     const cleanUsername = username.trim().toLowerCase();
-    const accounts = this.getStoredAccounts();
-    const target = accounts.find(a => a.username.toLowerCase() === cleanUsername);
-    if (!target) return false;
+    const cleanPassword = newPassword.trim();
+    if (!cleanPassword) return false;
 
-    target.passwordHash = newPassword;
-    this.saveAccounts(accounts);
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase
+      .from('app_users')
+      .update({ password_hash: cleanPassword })
+      .eq('username', cleanUsername);
 
-    // Also update in Supabase database if configured
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        await supabase
-          .from('app_users')
-          .update({ password_hash: newPassword })
-          .eq('username', cleanUsername);
-      } catch (err) {
-        console.warn('Could not sync password update to Supabase app_users table:', err);
-      }
+    if (error) {
+      console.error('Failed to update password in Supabase app_users table:', error);
+      throw new Error(`Failed to update password in cloud database: ${error.message}`);
     }
 
     return true;
@@ -110,12 +36,16 @@ class AuthService {
     const cleanName = newDisplayName.trim();
     if (!cleanName) return false;
 
-    const accounts = this.getStoredAccounts();
-    const target = accounts.find(a => a.username.toLowerCase() === cleanUsername);
-    if (!target) return false;
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase
+      .from('app_users')
+      .update({ display_name: cleanName })
+      .eq('username', cleanUsername);
 
-    target.displayName = cleanName;
-    this.saveAccounts(accounts);
+    if (error) {
+      console.error('Failed to update display name in Supabase app_users table:', error);
+      throw new Error(`Failed to update display name in cloud database: ${error.message}`);
+    }
 
     // Also update active session if it matches
     const active = this.getActiveSession();
@@ -136,19 +66,6 @@ class AuthService {
       }
     }
 
-    // Also update in Supabase database if configured
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        await supabase
-          .from('app_users')
-          .update({ display_name: cleanName })
-          .eq('username', cleanUsername);
-      } catch (err) {
-        console.warn('Could not sync name update to Supabase app_users table:', err);
-      }
-    }
-
     return true;
   }
 
@@ -157,59 +74,68 @@ class AuthService {
     password: string
   ): Promise<{ success: boolean; session?: UserSession; error?: string }> {
     const cleanUsername = username.trim().toLowerCase();
-    const supabase = getSupabase();
+    const cleanPassword = password.trim();
 
-    // 1. Try authenticating via Supabase 'app_users' table if online & configured
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('app_users')
-          .select('*')
-          .eq('username', cleanUsername)
-          .maybeSingle();
+    if (!cleanUsername || !cleanPassword) {
+      return { success: false, error: 'Please enter both User ID and Password.' };
+    }
 
-        if (!error && data) {
-          if (data.password_hash === password) {
-            const session: UserSession = {
-              id: data.id,
-              username: data.username,
-              displayName: data.display_name,
-              role: data.role as 'admin' | 'staff',
-              loginTime: new Date().toISOString(),
-            };
-            this.persistSession(session);
-            return { success: true, session };
-          } else {
-            return { success: false, error: 'Incorrect password. Please try again.' };
-          }
-        }
-      } catch (err) {
-        console.warn('Supabase authentication check failed, falling back to local/env:', err);
+    let supabase;
+    try {
+      supabase = getRequiredSupabase();
+    } catch {
+      return { 
+        success: false, 
+        error: 'Unable to connect to Supabase Cloud Database. Please check your internet connection.' 
+      };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .eq('username', cleanUsername)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Supabase authentication query error:', error);
+        return { 
+          success: false, 
+          error: `Cloud database error: ${error.message || 'Unable to authenticate. Check internet connection.'}` 
+        };
       }
+
+      if (!data) {
+        return { 
+          success: false, 
+          error: `User ID '${cleanUsername}' does not exist in the showroom cloud database.` 
+        };
+      }
+
+      if (data.password_hash !== cleanPassword) {
+        return { 
+          success: false, 
+          error: 'Incorrect password. Please verify and try again.' 
+        };
+      }
+
+      const session: UserSession = {
+        id: data.id,
+        username: data.username,
+        displayName: data.display_name || (data.role === 'admin' ? 'Owner' : 'Showroom Billing Staff'),
+        role: data.role as 'admin' | 'staff',
+        loginTime: new Date().toISOString(),
+      };
+
+      this.persistSession(session);
+      return { success: true, session };
+    } catch (err: any) {
+      console.error('Network error during Supabase login:', err);
+      return { 
+        success: false, 
+        error: 'Network connection failure. Please ensure your computer is connected to the internet.' 
+      };
     }
-
-    // 2. Fallback to .env and local account storage
-    const accounts = this.getStoredAccounts();
-    const account = accounts.find(a => a.username.toLowerCase() === cleanUsername);
-
-    if (!account) {
-      return { success: false, error: 'Invalid User ID. Please check your username.' };
-    }
-
-    if (account.passwordHash !== password) {
-      return { success: false, error: 'Incorrect password. Please try again.' };
-    }
-
-    const session: UserSession = {
-      id: account.id,
-      username: account.username,
-      displayName: account.displayName,
-      role: account.role,
-      loginTime: new Date().toISOString(),
-    };
-
-    this.persistSession(session);
-    return { success: true, session };
   }
 
   private persistSession(session: UserSession): void {
@@ -235,12 +161,7 @@ class AuthService {
     try {
       const adminData = sessionStorage.getItem(ADMIN_SESSION_KEY);
       if (adminData) {
-        const session = JSON.parse(adminData) as UserSession;
-        if (session.displayName && session.displayName.toLowerCase().includes('pawan')) {
-          session.displayName = 'Himanshu Choudhary (Owner)';
-          sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(session));
-        }
-        return session;
+        return JSON.parse(adminData) as UserSession;
       }
     } catch {
       // ignore

@@ -1,4 +1,4 @@
-import { getSupabase } from './supabaseClient';
+import { getRequiredSupabase } from './supabaseClient';
 import { authService } from './authService';
 import type { 
   Product, 
@@ -54,24 +54,34 @@ export interface IDataService {
   // Stats & Stock Alerts
   getDashboardStats(): Promise<DashboardStats>;
   getStockAlertCounts(): Promise<{ low: number; out: number }>;
-  resetToSampleData(): Promise<void>;
 }
 
-// Memory / Local clean store keys for clean 0-state offline fallback
-const STORAGE_KEYS = {
-  PRODUCTS: 'gl_store_products_v2',
-  CUSTOMERS: 'gl_store_customers_v2',
-  SUPPLIERS: 'gl_store_suppliers_v2',
-  SALES: 'gl_store_sales_v2',
-  PURCHASES: 'gl_store_purchases_v2',
-  EXPENSES: 'gl_store_expenses_v2',
-  MOVEMENTS: 'gl_store_movements_v2',
-};
+// Purge any legacy offline/mock database stores from browser localStorage
+try {
+  const legacyStoreKeys = [
+    'gl_store_products_v2',
+    'gl_store_customers_v2',
+    'gl_store_suppliers_v2',
+    'gl_store_sales_v2',
+    'gl_store_purchases_v2',
+    'gl_store_expenses_v2',
+    'gl_store_movements_v2',
+    'gl_ims_products',
+    'gl_ims_sales',
+    'gl_ims_customers',
+    'gl_ims_suppliers',
+    'gl_ims_purchases',
+    'gl_ims_expenses',
+    'gl_ims_inventory_tx'
+  ];
+  legacyStoreKeys.forEach(k => localStorage.removeItem(k));
+} catch {
+  // ignore
+}
 
 class SupabaseDataServiceImpl implements IDataService {
   /**
    * Enforce authentication gate on every data access route/call.
-   * If not logged in, reject access immediately.
    */
   private ensureAuthenticated(): void {
     if (!authService.isAuthenticated()) {
@@ -86,8 +96,7 @@ class SupabaseDataServiceImpl implements IDataService {
 
   /**
    * Strict Code-Level Security Gate:
-   * Blocks non-admin callers (such as Staff or unauthenticated calls) from viewing
-   * or modifying sensitive business records: Expenses, Purchases, Suppliers, Profit Margins.
+   * Blocks non-admin callers (such as Staff) from viewing or modifying sensitive records.
    */
   private ensureAdminRole(actionDescription: string): void {
     this.ensureAuthenticated();
@@ -97,49 +106,26 @@ class SupabaseDataServiceImpl implements IDataService {
     }
   }
 
-  // --- Clean local fallbacks (all start at 0 / empty array) ---
-  private getLocalList<T>(key: string): T[] {
-    try {
-      const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private saveLocalList<T>(key: string, list: T[]): void {
-    try {
-      localStorage.setItem(key, JSON.stringify(list));
-    } catch (e) {
-      console.error('Failed to save clean local data', e);
-    }
-  }
-
   // ==========================================
-  // PRODUCTS
+  // PRODUCTS (Live Supabase Cloud Database)
   // ==========================================
   async getProducts(): Promise<Product[]> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    let rawList: Product[] = [];
+    const supabase = getRequiredSupabase();
 
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Supabase getProducts error:', error);
-        rawList = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
-      } else {
-        rawList = (data || []).map(p => this.mapProductFromDb(p));
-      }
-    } else {
-      rawList = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
+    if (error) {
+      console.error('Supabase getProducts error:', error);
+      throw new Error(`Failed to load products from cloud database: ${error.message}`);
     }
 
-    // Role-based data protection: Redact cost price (wholesale purchase costs) from Staff
+    const rawList = (data || []).map(p => this.mapProductFromDb(p));
+
+    // Role-based protection: Redact wholesale cost price from staff
     if (this.getActiveRole() === 'staff') {
       return rawList.map(p => ({
         ...p,
@@ -152,27 +138,23 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async getProductById(id: string): Promise<Product | undefined> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    let prod: Product | undefined;
+    const supabase = getRequiredSupabase();
 
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-      if (!error && data) {
-        prod = this.mapProductFromDb(data);
-      }
+    if (error) {
+      console.error('Supabase getProductById error:', error);
+      throw new Error(`Failed to load product from cloud database: ${error.message}`);
     }
 
-    if (!prod) {
-      const list = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
-      prod = list.find(p => p.id === id);
-    }
+    if (!data) return undefined;
 
-    if (prod && this.getActiveRole() === 'staff') {
+    const prod = this.mapProductFromDb(data);
+    if (this.getActiveRole() === 'staff') {
       return { ...prod, costPrice: 0 };
     }
     return prod;
@@ -192,31 +174,21 @@ class SupabaseDataServiceImpl implements IDataService {
       updatedAt: now,
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      const { error } = await supabase.from('products').insert(this.mapProductToDb(newProduct));
-      if (error) {
-        console.error('Supabase createProduct error:', error);
-      }
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('products').insert(this.mapProductToDb(newProduct));
+    if (error) {
+      console.error('Supabase createProduct error:', error);
+      throw new Error(`Failed to create product in cloud database: ${error.message}`);
     }
-
-    const list = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
-    list.unshift(newProduct);
-    this.saveLocalList(STORAGE_KEYS.PRODUCTS, list);
 
     return newProduct;
   }
 
   async updateProduct(id: string, updates: Partial<Product>): Promise<Product> {
     this.ensureAuthenticated();
-    const now = new Date().toISOString();
-
-    const list = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
-    const index = list.findIndex(p => p.id === id);
-    const existing = index >= 0 ? list[index] : (await this.getProductById(id));
-
+    const existing = await this.getProductById(id);
     if (!existing) {
-      throw new Error(`Product with ID ${id} not found.`);
+      throw new Error(`Product with ID ${id} not found in cloud database.`);
     }
 
     const updatedQty = updates.stockQuantity !== undefined ? updates.stockQuantity : existing.stockQuantity;
@@ -227,21 +199,18 @@ class SupabaseDataServiceImpl implements IDataService {
       ...existing,
       ...updates,
       status,
-      updatedAt: now,
+      updatedAt: new Date().toISOString(),
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      const { error } = await supabase
-        .from('products')
-        .update(this.mapProductToDb(updatedProduct))
-        .eq('id', id);
-      if (error) console.error('Supabase updateProduct error:', error);
-    }
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase
+      .from('products')
+      .update(this.mapProductToDb(updatedProduct))
+      .eq('id', id);
 
-    if (index >= 0) {
-      list[index] = updatedProduct;
-      this.saveLocalList(STORAGE_KEYS.PRODUCTS, list);
+    if (error) {
+      console.error('Supabase updateProduct error:', error);
+      throw new Error(`Failed to update product in cloud database: ${error.message}`);
     }
 
     return updatedProduct;
@@ -249,29 +218,32 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async deleteProduct(id: string): Promise<void> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    if (supabase) {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (error) console.error('Supabase deleteProduct error:', error);
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase deleteProduct error:', error);
+      throw new Error(`Failed to delete product from cloud database: ${error.message}`);
     }
-
-    const list = this.getLocalList<Product>(STORAGE_KEYS.PRODUCTS);
-    this.saveLocalList(STORAGE_KEYS.PRODUCTS, list.filter(p => p.id !== id));
   }
 
   // ==========================================
-  // CUSTOMERS
+  // CUSTOMERS (Live Supabase Cloud Database)
   // ==========================================
   async getCustomers(): Promise<Customer[]> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(c => this.mapCustomerFromDb(c));
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase getCustomers error:', error);
+      throw new Error(`Failed to load customers from cloud database: ${error.message}`);
     }
-    return this.getLocalList<Customer>(STORAGE_KEYS.CUSTOMERS);
+
+    return (data || []).map(c => this.mapCustomerFromDb(c));
   }
 
   async createCustomer(data: Omit<Customer, 'id' | 'createdAt' | 'totalPurchases' | 'outstandingBalance'>): Promise<Customer> {
@@ -285,58 +257,74 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('customers').insert(this.mapCustomerToDb(customer));
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('customers').insert(this.mapCustomerToDb(customer));
+    if (error) {
+      console.error('Supabase createCustomer error:', error);
+      throw new Error(`Failed to create customer in cloud database: ${error.message}`);
     }
 
-    const list = this.getLocalList<Customer>(STORAGE_KEYS.CUSTOMERS);
-    list.unshift(customer);
-    this.saveLocalList(STORAGE_KEYS.CUSTOMERS, list);
     return customer;
   }
 
   async updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer> {
     this.ensureAuthenticated();
-    const list = this.getLocalList<Customer>(STORAGE_KEYS.CUSTOMERS);
-    const existing = list.find(c => c.id === id);
-    if (!existing) throw new Error('Customer not found');
+    const supabase = getRequiredSupabase();
 
-    const updated = { ...existing, ...updates };
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('customers').update(this.mapCustomerToDb(updated)).eq('id', id);
+    const { data: existing, error: getErr } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (getErr || !existing) {
+      throw new Error('Customer not found in cloud database.');
     }
 
-    const idx = list.findIndex(c => c.id === id);
-    if (idx >= 0) list[idx] = updated;
-    this.saveLocalList(STORAGE_KEYS.CUSTOMERS, list);
+    const mapped = this.mapCustomerFromDb(existing);
+    const updated = { ...mapped, ...updates };
+
+    const { error } = await supabase
+      .from('customers')
+      .update(this.mapCustomerToDb(updated))
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase updateCustomer error:', error);
+      throw new Error(`Failed to update customer in cloud database: ${error.message}`);
+    }
+
     return updated;
   }
 
   async deleteCustomer(id: string): Promise<void> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('customers').delete().eq('id', id);
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('customers').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase deleteCustomer error:', error);
+      throw new Error(`Failed to delete customer from cloud database: ${error.message}`);
     }
-    const list = this.getLocalList<Customer>(STORAGE_KEYS.CUSTOMERS);
-    this.saveLocalList(STORAGE_KEYS.CUSTOMERS, list.filter(c => c.id !== id));
   }
 
   // ==========================================
-  // SUPPLIERS (Admin-Only)
+  // SUPPLIERS (Admin-Only Live Supabase)
   // ==========================================
   async getSuppliers(): Promise<Supplier[]> {
     this.ensureAdminRole('view supplier contacts and trade balances');
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('suppliers').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(s => this.mapSupplierFromDb(s));
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase getSuppliers error:', error);
+      throw new Error(`Failed to load suppliers from cloud database: ${error.message}`);
     }
-    return this.getLocalList<Supplier>(STORAGE_KEYS.SUPPLIERS);
+
+    return (data || []).map(s => this.mapSupplierFromDb(s));
   }
 
   async createSupplier(data: Omit<Supplier, 'id' | 'createdAt' | 'balanceDue'>): Promise<Supplier> {
@@ -348,71 +336,92 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: new Date().toISOString(),
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('suppliers').insert(this.mapSupplierToDb(supplier));
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('suppliers').insert(this.mapSupplierToDb(supplier));
+    if (error) {
+      console.error('Supabase createSupplier error:', error);
+      throw new Error(`Failed to create supplier in cloud database: ${error.message}`);
     }
 
-    const list = this.getLocalList<Supplier>(STORAGE_KEYS.SUPPLIERS);
-    list.unshift(supplier);
-    this.saveLocalList(STORAGE_KEYS.SUPPLIERS, list);
     return supplier;
   }
 
   async updateSupplier(id: string, updates: Partial<Supplier>): Promise<Supplier> {
     this.ensureAdminRole('update supplier profiles');
-    const list = this.getLocalList<Supplier>(STORAGE_KEYS.SUPPLIERS);
-    const existing = list.find(s => s.id === id);
-    if (!existing) throw new Error('Supplier not found');
+    const supabase = getRequiredSupabase();
 
-    const updated = { ...existing, ...updates };
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('suppliers').update(this.mapSupplierToDb(updated)).eq('id', id);
+    const { data: existing, error: getErr } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (getErr || !existing) {
+      throw new Error('Supplier not found in cloud database.');
     }
 
-    const idx = list.findIndex(s => s.id === id);
-    if (idx >= 0) list[idx] = updated;
-    this.saveLocalList(STORAGE_KEYS.SUPPLIERS, list);
+    const mapped = this.mapSupplierFromDb(existing);
+    const updated = { ...mapped, ...updates };
+
+    const { error } = await supabase
+      .from('suppliers')
+      .update(this.mapSupplierToDb(updated))
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase updateSupplier error:', error);
+      throw new Error(`Failed to update supplier in cloud database: ${error.message}`);
+    }
+
     return updated;
   }
 
   async deleteSupplier(id: string): Promise<void> {
     this.ensureAdminRole('delete suppliers');
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('suppliers').delete().eq('id', id);
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('suppliers').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase deleteSupplier error:', error);
+      throw new Error(`Failed to delete supplier from cloud database: ${error.message}`);
     }
-    const list = this.getLocalList<Supplier>(STORAGE_KEYS.SUPPLIERS);
-    this.saveLocalList(STORAGE_KEYS.SUPPLIERS, list.filter(s => s.id !== id));
   }
 
   // ==========================================
-  // SALES & INVOICING
+  // SALES & POS (Live Supabase Cloud Database)
   // ==========================================
   async getSales(): Promise<Sale[]> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('sales').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(s => this.mapSaleFromDb(s));
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase getSales error:', error);
+      throw new Error(`Failed to load sales from cloud database: ${error.message}`);
     }
-    return this.getLocalList<Sale>(STORAGE_KEYS.SALES);
+
+    return (data || []).map(s => this.mapSaleFromDb(s));
   }
 
   async getSaleById(id: string): Promise<Sale | undefined> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('sales').select('*').eq('id', id).maybeSingle();
-      if (!error && data) {
-        return this.mapSaleFromDb(data);
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Supabase getSaleById error:', error);
+      throw new Error(`Failed to load invoice from cloud database: ${error.message}`);
     }
-    const list = this.getLocalList<Sale>(STORAGE_KEYS.SALES);
-    return list.find(s => s.id === id);
+
+    return data ? this.mapSaleFromDb(data) : undefined;
   }
 
   async createSale(saleData: Omit<Sale, 'id' | 'createdAt' | 'invoiceNumber'>): Promise<Sale> {
@@ -426,7 +435,9 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
-    // 1. Deduct Stock for sold items & log movements
+    const supabase = getRequiredSupabase();
+
+    // 1. Deduct Stock for sold items in Supabase
     for (const item of sale.items) {
       await this.adjustStock(
         item.productId,
@@ -436,29 +447,35 @@ class SupabaseDataServiceImpl implements IDataService {
       );
     }
 
-    // 2. Save Sale
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('sales').insert(this.mapSaleToDb(sale));
+    // 2. Insert Sale record into Supabase
+    const { error } = await supabase.from('sales').insert(this.mapSaleToDb(sale));
+    if (error) {
+      console.error('Supabase createSale error:', error);
+      throw new Error(`Failed to save invoice in cloud database: ${error.message}`);
     }
-
-    const list = this.getLocalList<Sale>(STORAGE_KEYS.SALES);
-    list.unshift(sale);
-    this.saveLocalList(STORAGE_KEYS.SALES, list);
 
     // 3. Update customer purchase balance if customerId provided
     if (sale.customerId) {
       try {
-        const customer = (await this.getCustomers()).find(c => c.id === sale.customerId);
-        if (customer) {
-          const outstanding = sale.paymentStatus === 'Pending' ? customer.outstandingBalance + sale.grandTotal : customer.outstandingBalance;
+        const { data: custRow } = await supabase
+          .from('customers')
+          .select('*')
+          .eq('id', sale.customerId)
+          .maybeSingle();
+
+        if (custRow) {
+          const customer = this.mapCustomerFromDb(custRow);
+          const outstanding = sale.paymentStatus === 'Pending' 
+            ? customer.outstandingBalance + sale.grandTotal 
+            : customer.outstandingBalance;
+
           await this.updateCustomer(customer.id, {
             totalPurchases: customer.totalPurchases + sale.grandTotal,
             outstandingBalance: outstanding,
           });
         }
       } catch (err) {
-        console.warn('Failed to update customer purchase totals:', err);
+        console.warn('Failed to update customer purchase totals in cloud database:', err);
       }
     }
 
@@ -470,14 +487,19 @@ class SupabaseDataServiceImpl implements IDataService {
   // ==========================================
   async getPurchases(): Promise<Purchase[]> {
     this.ensureAdminRole('view supplier purchase orders');
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('purchases').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(p => this.mapPurchaseFromDb(p));
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('purchases')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase getPurchases error:', error);
+      throw new Error(`Failed to load purchases from cloud database: ${error.message}`);
     }
-    return this.getLocalList<Purchase>(STORAGE_KEYS.PURCHASES);
+
+    return (data || []).map(p => this.mapPurchaseFromDb(p));
   }
 
   async createPurchase(data: Omit<Purchase, 'id' | 'createdAt' | 'poNumber' | 'status'>): Promise<Purchase> {
@@ -492,91 +514,113 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('purchases').insert(this.mapPurchaseToDb(purchase));
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('purchases').insert(this.mapPurchaseToDb(purchase));
+    if (error) {
+      console.error('Supabase createPurchase error:', error);
+      throw new Error(`Failed to save purchase order in cloud database: ${error.message}`);
     }
-
-    const list = this.getLocalList<Purchase>(STORAGE_KEYS.PURCHASES);
-    list.unshift(purchase);
-    this.saveLocalList(STORAGE_KEYS.PURCHASES, list);
 
     return purchase;
   }
 
   async receivePurchase(id: string): Promise<Purchase> {
     this.ensureAdminRole('receive inward purchase orders');
-    const purchases = await this.getPurchases();
-    const purchase = purchases.find(p => p.id === id);
-    if (!purchase) throw new Error('Purchase order not found');
+    const supabase = getRequiredSupabase();
 
-    if (purchase.status === 'Received') {
-      return purchase;
+    const { data: row, error: getErr } = await supabase
+      .from('purchases')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (getErr || !row) {
+      throw new Error('Purchase order not found in cloud database.');
     }
 
-    // Inward stock adjustment for each item
+    const purchase = this.mapPurchaseFromDb(row);
+    if (purchase.status === 'Received') return purchase;
+
+    // Inward stock adjustment for received items in Supabase
     for (const item of purchase.items) {
       await this.adjustStock(
         item.productId,
         item.quantity,
         'IN',
-        `Stock inward from PO #${purchase.poNumber}`
+        `Received via Purchase Order #${purchase.poNumber}`
       );
     }
 
-    const now = new Date().toISOString();
     const updated: Purchase = {
       ...purchase,
       status: 'Received',
-      receivedDate: now,
+      receivedDate: new Date().toISOString(),
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('purchases').update(this.mapPurchaseToDb(updated)).eq('id', id);
-    }
+    const { error } = await supabase
+      .from('purchases')
+      .update(this.mapPurchaseToDb(updated))
+      .eq('id', id);
 
-    const list = this.getLocalList<Purchase>(STORAGE_KEYS.PURCHASES);
-    const idx = list.findIndex(p => p.id === id);
-    if (idx >= 0) list[idx] = updated;
-    this.saveLocalList(STORAGE_KEYS.PURCHASES, list);
+    if (error) {
+      console.error('Supabase receivePurchase error:', error);
+      throw new Error(`Failed to update purchase order in cloud database: ${error.message}`);
+    }
 
     return updated;
   }
 
   async updatePurchasePaymentStatus(id: string, paymentStatus: 'Paid' | 'Pending' | 'Partial'): Promise<Purchase> {
     this.ensureAdminRole('update purchase order payment statuses');
-    const purchases = await this.getPurchases();
-    const purchase = purchases.find(p => p.id === id);
-    if (!purchase) throw new Error('Purchase order not found');
+    const supabase = getRequiredSupabase();
 
-    const updated: Purchase = { ...purchase, paymentStatus };
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('purchases').update({ payment_status: paymentStatus }).eq('id', id);
+    const { data: row, error: getErr } = await supabase
+      .from('purchases')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (getErr || !row) {
+      throw new Error('Purchase order not found in cloud database.');
     }
 
-    const list = this.getLocalList<Purchase>(STORAGE_KEYS.PURCHASES);
-    const idx = list.findIndex(p => p.id === id);
-    if (idx >= 0) list[idx] = updated;
-    this.saveLocalList(STORAGE_KEYS.PURCHASES, list);
+    const purchase = this.mapPurchaseFromDb(row);
+    const updated: Purchase = {
+      ...purchase,
+      paymentStatus,
+    };
+
+    const { error } = await supabase
+      .from('purchases')
+      .update(this.mapPurchaseToDb(updated))
+      .eq('id', id);
+
+    if (error) {
+      console.error('Supabase updatePurchasePaymentStatus error:', error);
+      throw new Error(`Failed to update purchase payment status in cloud database: ${error.message}`);
+    }
 
     return updated;
   }
 
   // ==========================================
-  // EXPENSES (Admin Only)
+  // EXPENSES (Admin Only - Live Supabase)
   // ==========================================
   async getExpenses(): Promise<Expense[]> {
     this.ensureAdminRole('view showroom expenses');
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('expenses').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(e => this.mapExpenseFromDb(e));
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase getExpenses error:', error);
+      throw new Error(`Failed to load expenses from cloud database: ${error.message}`);
     }
-    return this.getLocalList<Expense>(STORAGE_KEYS.EXPENSES);
+
+    return (data || []).map(e => this.mapExpenseFromDb(e));
   }
 
   async createExpense(data: Omit<Expense, 'id' | 'createdAt' | 'expenseNumber'>): Promise<Expense> {
@@ -590,26 +634,24 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('expenses').insert(this.mapExpenseToDb(expense));
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('expenses').insert(this.mapExpenseToDb(expense));
+    if (error) {
+      console.error('Supabase createExpense error:', error);
+      throw new Error(`Failed to save expense in cloud database: ${error.message}`);
     }
-
-    const list = this.getLocalList<Expense>(STORAGE_KEYS.EXPENSES);
-    list.unshift(expense);
-    this.saveLocalList(STORAGE_KEYS.EXPENSES, list);
 
     return expense;
   }
 
   async deleteExpense(id: string): Promise<void> {
     this.ensureAdminRole('delete showroom expenses');
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('expenses').delete().eq('id', id);
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) {
+      console.error('Supabase deleteExpense error:', error);
+      throw new Error(`Failed to delete expense from cloud database: ${error.message}`);
     }
-    const list = this.getLocalList<Expense>(STORAGE_KEYS.EXPENSES);
-    this.saveLocalList(STORAGE_KEYS.EXPENSES, list.filter(e => e.id !== id));
   }
 
   // ==========================================
@@ -617,14 +659,19 @@ class SupabaseDataServiceImpl implements IDataService {
   // ==========================================
   async getStockMovements(): Promise<StockMovement[]> {
     this.ensureAuthenticated();
-    const supabase = getSupabase();
-    if (supabase) {
-      const { data, error } = await supabase.from('stock_movements').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        return data.map(m => this.mapMovementFromDb(m));
-      }
+    const supabase = getRequiredSupabase();
+
+    const { data, error } = await supabase
+      .from('stock_movements')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase getStockMovements error:', error);
+      throw new Error(`Failed to load stock movements from cloud database: ${error.message}`);
     }
-    return this.getLocalList<StockMovement>(STORAGE_KEYS.MOVEMENTS);
+
+    return (data || []).map(m => this.mapMovementFromDb(m));
   }
 
   async adjustStock(
@@ -656,14 +703,11 @@ class SupabaseDataServiceImpl implements IDataService {
       date: new Date().toISOString(),
     };
 
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.from('stock_movements').insert(this.mapMovementToDb(movement, product.sku));
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('stock_movements').insert(this.mapMovementToDb(movement, product.sku));
+    if (error) {
+      console.warn('Could not record stock movement in cloud database:', error);
     }
-
-    const list = this.getLocalList<StockMovement>(STORAGE_KEYS.MOVEMENTS);
-    list.unshift(movement);
-    this.saveLocalList(STORAGE_KEYS.MOVEMENTS, list);
   }
 
   // ==========================================
@@ -709,12 +753,6 @@ class SupabaseDataServiceImpl implements IDataService {
     return { low: lowCount, out: outCount };
   }
 
-  async resetToSampleData(): Promise<void> {
-    this.ensureAuthenticated();
-    // Reset all tables to clean 0
-    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
-  }
-
   // ==========================================
   // DATABASE MAPPER HELPERS (CamelCase <-> Snake_Case)
   // ==========================================
@@ -753,7 +791,7 @@ class SupabaseDataServiceImpl implements IDataService {
       min_stock_threshold: p.minStockLevel,
       shelf_location: p.location,
       photo_url: p.imageUrl,
-      status: p.status === 'out_of_stock' || p.status === 'low_stock' ? 'ACTIVE' : 'ACTIVE',
+      status: 'ACTIVE',
       updated_at: new Date().toISOString(),
     };
   }
