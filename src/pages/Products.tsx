@@ -38,8 +38,13 @@ export const Products: React.FC = () => {
 
   const handleDeleteProduct = async (prod: Product) => {
     if (window.confirm(`Are you sure you want to delete ${prod.name}?`)) {
-      await dataService.deleteProduct(prod.id);
-      loadData();
+      setProducts(prev => prev.filter(p => p.id !== prod.id));
+      try {
+        await dataService.deleteProduct(prod.id);
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete product.');
+        loadData();
+      }
     }
   };
 

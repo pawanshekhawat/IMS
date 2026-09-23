@@ -24,8 +24,13 @@ export const Expenses: React.FC = () => {
 
   const handleDelete = async (exp: Expense) => {
     if (window.confirm(`Delete expense "${exp.title}" of ₹${exp.amount}?`)) {
-      await dataService.deleteExpense(exp.id);
-      loadData();
+      setExpenses(prev => prev.filter(e => e.id !== exp.id));
+      try {
+        await dataService.deleteExpense(exp.id);
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete expense.');
+        loadData();
+      }
     }
   };
 

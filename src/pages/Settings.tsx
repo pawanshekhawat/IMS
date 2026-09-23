@@ -8,6 +8,10 @@ import {
   ArrowUpCircle,
   Sparkles,
   User,
+  Lock,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
@@ -54,8 +58,22 @@ export const Settings: React.FC = () => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [updateError, setUpdateError] = useState<string | null>(null);
+
+  // Admin Master Password States
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminPasswordSaving, setAdminPasswordSaving] = useState(false);
+  const [adminPasswordFeedback, setAdminPasswordFeedback] = useState<string | null>(null);
+  const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
+
+  // Staff Password States
   const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+  const [staffPasswordSaving, setStaffPasswordSaving] = useState(false);
   const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
+  const [staffPasswordError, setStaffPasswordError] = useState<string | null>(null);
+
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState<boolean>(() => {
     return localStorage.getItem('auto_update_enabled') !== 'false';
   });
@@ -66,17 +84,59 @@ export const Settings: React.FC = () => {
     localStorage.setItem('auto_update_enabled', String(val));
   };
 
-  const handleUpdateStaffPassword = async () => {
-    if (!newStaffPassword.trim()) return;
+  const handleUpdateAdminPassword = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanPass = newAdminPassword.trim();
+    const cleanConfirm = confirmAdminPassword.trim();
+
+    if (!cleanPass) {
+      setAdminPasswordError('Please enter a new admin password.');
+      return;
+    }
+
+    if (cleanPass.length < 4) {
+      setAdminPasswordError('Password must be at least 4 characters long.');
+      return;
+    }
+
+    if (cleanPass !== cleanConfirm) {
+      setAdminPasswordError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setAdminPasswordError(null);
+    setAdminPasswordSaving(true);
     try {
-      const ok = await authService.updatePassword('staff', newStaffPassword.trim());
+      const ok = await authService.updatePassword('admin', cleanPass);
+      setAdminPasswordSaving(false);
+      if (ok) {
+        setAdminPasswordFeedback('Admin master password updated successfully in Supabase cloud!');
+        setNewAdminPassword('');
+        setConfirmAdminPassword('');
+        setTimeout(() => setAdminPasswordFeedback(null), 5000);
+      }
+    } catch (err: any) {
+      setAdminPasswordSaving(false);
+      setAdminPasswordError(err?.message || 'Failed to update admin password in Supabase.');
+    }
+  };
+
+  const handleUpdateStaffPassword = async () => {
+    const cleanPass = newStaffPassword.trim();
+    if (!cleanPass) return;
+    setStaffPasswordError(null);
+    setStaffPasswordSaving(true);
+    try {
+      const ok = await authService.updatePassword('staff', cleanPass);
+      setStaffPasswordSaving(false);
       if (ok) {
         setPasswordFeedback('Staff password updated successfully in Supabase cloud!');
         setNewStaffPassword('');
         setTimeout(() => setPasswordFeedback(null), 4000);
       }
     } catch (err: any) {
-      alert(err?.message || 'Failed to update staff password in Supabase');
+      setStaffPasswordSaving(false);
+      setStaffPasswordError(err?.message || 'Failed to update staff password in Supabase');
     }
   };
   const defaultStoreInfo = {
@@ -450,20 +510,20 @@ export const Settings: React.FC = () => {
           </form>
         </Card>
 
-        {/* 3. Administrator Profile & Display Name */}
+        {/* 3. Administrator Profile & Security */}
         <Card
-          title="👤 Administrator Profile & Display Name"
-          subtitle="Customize the owner / administrator name displayed on the dashboard, welcome screen, and sidebar"
+          title="👤 Administrator Profile & Master Password"
+          subtitle="Customize the owner / administrator display name and update the master login password"
         >
-          <form onSubmit={handleUpdateAdminName} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '1fr',
-              maxWidth: '480px',
-              gap: '16px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+              gap: '20px',
             }}>
+              {/* Box 1: Owner / Admin Display Name */}
               <div style={{
-                padding: '16px 18px',
+                padding: '18px 20px',
                 borderRadius: 'var(--radius-lg)',
                 backgroundColor: 'var(--color-neutral-200)',
                 border: '1px solid var(--color-neutral-300)',
@@ -474,7 +534,7 @@ export const Settings: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                      Administrator Profile
+                      Administrator Identity
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
                       User ID: <strong>admin</strong> • Owner Permissions
@@ -483,8 +543,8 @@ export const Settings: React.FC = () => {
                   <Badge variant="success">Administrator</Badge>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-700)', marginBottom: '6px' }}>
+                <form onSubmit={handleUpdateAdminName} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-700)' }}>
                     Owner / Admin Display Name
                   </label>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -495,9 +555,9 @@ export const Settings: React.FC = () => {
                         value={adminDisplayName}
                         onChange={(e) => setAdminDisplayName(e.target.value)}
                         className="input-base"
-                        style={{ width: '100%', height: '36px', fontSize: '12px', paddingLeft: '32px' }}
+                        style={{ width: '100%', height: '38px', fontSize: '12px', paddingLeft: '34px' }}
                       />
-                      <User size={14} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
+                      <User size={15} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
                     </div>
                     <Button
                       size="sm"
@@ -508,25 +568,129 @@ export const Settings: React.FC = () => {
                       {nameSaving ? 'Saving...' : 'Save'}
                     </Button>
                   </div>
+                  {nameFeedback && (
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'var(--color-success)',
+                      padding: '8px 12px',
+                      backgroundColor: '#dcfce7',
+                      borderRadius: 'var(--radius-md)',
+                    }}>
+                      ✓ {nameFeedback}
+                    </div>
+                  )}
+                </form>
+              </div>
+
+              {/* Box 2: Owner / Admin Password Change */}
+              <div style={{
+                padding: '18px 20px',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--color-neutral-200)',
+                border: '1px solid var(--color-neutral-300)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
+                      Admin Master Password
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
+                      User ID: <strong>admin</strong> • Master Login Control
+                    </div>
+                  </div>
+                  <Badge variant="primary">Security</Badge>
                 </div>
+
+                <form onSubmit={handleUpdateAdminPassword} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type={showAdminPassword ? 'text' : 'password'}
+                      placeholder="New Admin Password"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="input-base"
+                      style={{ width: '100%', height: '38px', fontSize: '12px', paddingLeft: '34px', paddingRight: '36px' }}
+                    />
+                    <Lock size={15} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--color-neutral-500)',
+                      }}
+                      tabIndex={-1}
+                      aria-label={showAdminPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showAdminPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type={showAdminPassword ? 'text' : 'password'}
+                        placeholder="Confirm New Password"
+                        value={confirmAdminPassword}
+                        onChange={(e) => setConfirmAdminPassword(e.target.value)}
+                        className="input-base"
+                        style={{ width: '100%', height: '38px', fontSize: '12px', paddingLeft: '34px' }}
+                      />
+                      <KeyRound size={15} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      type="submit"
+                      disabled={!newAdminPassword.trim() || !confirmAdminPassword.trim() || adminPasswordSaving}
+                    >
+                      {adminPasswordSaving ? 'Updating...' : 'Update Password'}
+                    </Button>
+                  </div>
+
+                  {adminPasswordError && (
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--color-danger)',
+                      padding: '8px 12px',
+                      backgroundColor: 'var(--color-danger-bg)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid #fca5a5',
+                    }}>
+                      ⚠️ {adminPasswordError}
+                    </div>
+                  )}
+
+                  {adminPasswordFeedback && (
+                    <div style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'var(--color-success)',
+                      padding: '8px 12px',
+                      backgroundColor: '#dcfce7',
+                      borderRadius: 'var(--radius-md)',
+                    }}>
+                      ✓ {adminPasswordFeedback}
+                    </div>
+                  )}
+                </form>
               </div>
             </div>
-
-            {nameFeedback && (
-              <div style={{
-                fontSize: '12px',
-                fontWeight: 700,
-                color: 'var(--color-success)',
-                padding: '8px 12px',
-                backgroundColor: '#dcfce7',
-                borderRadius: 'var(--radius-md)',
-                display: 'inline-block',
-                maxWidth: '480px',
-              }}>
-                ✓ {nameFeedback}
-              </div>
-            )}
-          </form>
+          </div>
         </Card>
 
         {/* 4. Staff Access & Counter Credentials */}
@@ -538,7 +702,7 @@ export const Settings: React.FC = () => {
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr',
-              maxWidth: '480px',
+              maxWidth: '520px',
               gap: '16px',
             }}>
               {/* Staff Password Box */}
@@ -564,25 +728,64 @@ export const Settings: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="password"
-                    placeholder="New staff password"
-                    value={newStaffPassword}
-                    onChange={(e) => setNewStaffPassword(e.target.value)}
-                    className="input-base"
-                    style={{ flex: 1, height: '36px', fontSize: '12px' }}
-                  />
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      type={showStaffPassword ? 'text' : 'password'}
+                      placeholder="New staff password"
+                      value={newStaffPassword}
+                      onChange={(e) => setNewStaffPassword(e.target.value)}
+                      className="input-base"
+                      style={{ width: '100%', height: '38px', fontSize: '12px', paddingLeft: '32px', paddingRight: '36px' }}
+                    />
+                    <Lock size={15} color="var(--color-neutral-500)" style={{ position: 'absolute', left: '10px', top: '11px', pointerEvents: 'none' }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowStaffPassword(!showStaffPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--color-neutral-500)',
+                      }}
+                      tabIndex={-1}
+                      aria-label={showStaffPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showStaffPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                   <Button
                     size="sm"
                     variant="primary"
                     onClick={handleUpdateStaffPassword}
-                    disabled={!newStaffPassword.trim()}
+                    disabled={!newStaffPassword.trim() || staffPasswordSaving}
                   >
-                    Save
+                    {staffPasswordSaving ? 'Saving...' : 'Save Password'}
                   </Button>
                 </div>
               </div>
             </div>
+
+            {staffPasswordError && (
+              <div style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--color-danger)',
+                padding: '8px 12px',
+                backgroundColor: 'var(--color-danger-bg)',
+                borderRadius: 'var(--radius-md)',
+                display: 'inline-block',
+                maxWidth: '520px',
+              }}>
+                ⚠️ {staffPasswordError}
+              </div>
+            )}
 
             {passwordFeedback && (
               <div style={{
@@ -593,6 +796,7 @@ export const Settings: React.FC = () => {
                 backgroundColor: '#dcfce7',
                 borderRadius: 'var(--radius-md)',
                 display: 'inline-block',
+                maxWidth: '520px',
               }}>
                 ✓ {passwordFeedback}
               </div>

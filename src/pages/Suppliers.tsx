@@ -23,8 +23,13 @@ export const Suppliers: React.FC = () => {
 
   const handleDelete = async (s: Supplier) => {
     if (window.confirm(`Are you sure you want to delete supplier ${s.name}?`)) {
-      await dataService.deleteSupplier(s.id);
-      loadData();
+      setSuppliers(prev => prev.filter(item => item.id !== s.id));
+      try {
+        await dataService.deleteSupplier(s.id);
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete supplier.');
+        loadData();
+      }
     }
   };
 

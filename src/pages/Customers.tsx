@@ -23,8 +23,13 @@ export const Customers: React.FC = () => {
 
   const handleDelete = async (cust: Customer) => {
     if (window.confirm(`Are you sure you want to delete customer ${cust.name}?`)) {
-      await dataService.deleteCustomer(cust.id);
-      loadData();
+      setCustomers(prev => prev.filter(c => c.id !== cust.id));
+      try {
+        await dataService.deleteCustomer(cust.id);
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete customer.');
+        loadData();
+      }
     }
   };
 

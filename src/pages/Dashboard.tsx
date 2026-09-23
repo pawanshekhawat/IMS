@@ -75,7 +75,6 @@ export const Dashboard: React.FC = () => {
             subtext={`${stats?.todayOrdersCount || 0} completed invoices today`}
             icon={<Receipt size={20} />}
             variant="secondary"
-            trend={{ value: '14.2% vs yesterday', isPositive: true }}
           />
 
           <StatCard

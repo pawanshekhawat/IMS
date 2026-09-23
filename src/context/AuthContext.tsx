@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
+import { dataService } from '../services/dataService';
 import type { UserRole, UserSession } from '../types';
 
 interface AuthContextType {
@@ -31,6 +32,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     const res = await authService.login(username, password);
     if (res.success && res.session) {
+      dataService.invalidateCache();
       setUser(res.session);
       return { success: true };
     }
@@ -38,6 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    dataService.invalidateCache();
     authService.logout();
     setUser(null);
   };

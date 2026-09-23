@@ -1,5 +1,6 @@
 import type { UserSession } from '../types';
 import { getRequiredSupabase } from './supabaseClient';
+import { rateLimiter } from './rateLimiter';
 
 const STAFF_SESSION_KEY = 'gl_ims_staff_session';
 const ADMIN_SESSION_KEY = 'gl_ims_admin_session';
@@ -16,6 +17,9 @@ class AuthService {
     const cleanUsername = username.trim().toLowerCase();
     const cleanPassword = newPassword.trim();
     if (!cleanPassword) return false;
+
+    // Rate limit: max 3 attempts per 2 minutes
+    rateLimiter.enforceLimit('admin_update_password', 3, 2 * 60 * 1000, 'update account password');
 
     const supabase = getRequiredSupabase();
     const { error } = await supabase
@@ -35,6 +39,9 @@ class AuthService {
     const cleanUsername = username.trim().toLowerCase();
     const cleanName = newDisplayName.trim();
     if (!cleanName) return false;
+
+    // Rate limit: max 5 attempts per minute
+    rateLimiter.enforceLimit('admin_update_display_name', 5, 60 * 1000, 'update showroom name');
 
     const supabase = getRequiredSupabase();
     const { error } = await supabase
@@ -80,6 +87,12 @@ class AuthService {
       return { success: false, error: 'Please enter both User ID and Password.' };
     }
 
+    // 1. Rate Limiting Check: Block if under lockout (brute-force) or rapid burst spam
+    const rateCheck = rateLimiter.checkLoginRateLimit(cleanUsername);
+    if (!rateCheck.allowed) {
+      return { success: false, error: rateCheck.error };
+    }
+
     let supabase;
     try {
       supabase = getRequiredSupabase();
@@ -106,18 +119,27 @@ class AuthService {
       }
 
       if (!data) {
+        const failResult = rateLimiter.recordFailedLogin(cleanUsername);
         return { 
           success: false, 
-          error: `User ID '${cleanUsername}' does not exist in the showroom cloud database.` 
+          error: failResult.locked
+            ? failResult.error
+            : `User ID '${cleanUsername}' does not exist in the showroom cloud database. (${failResult.remainingAttempts} attempt(s) remaining)`
         };
       }
 
       if (data.password_hash !== cleanPassword) {
+        const failResult = rateLimiter.recordFailedLogin(cleanUsername);
         return { 
           success: false, 
-          error: 'Incorrect password. Please verify and try again.' 
+          error: failResult.locked
+            ? failResult.error
+            : `Incorrect password. (${failResult.remainingAttempts} attempt(s) remaining before temporary lockout)`
         };
       }
+
+      // Successful authentication: clear any failed attempt history
+      rateLimiter.recordSuccessfulLogin(cleanUsername);
 
       const session: UserSession = {
         id: data.id,

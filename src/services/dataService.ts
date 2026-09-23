@@ -1,5 +1,6 @@
 import { getRequiredSupabase } from './supabaseClient';
 import { authService } from './authService';
+import { rateLimiter } from './rateLimiter';
 import type { 
   Product, 
   Customer, 
@@ -11,49 +12,61 @@ import type {
   DashboardStats 
 } from '../types';
 
+export type CacheEntity = 
+  | 'products' 
+  | 'customers' 
+  | 'suppliers' 
+  | 'sales' 
+  | 'purchases' 
+  | 'expenses' 
+  | 'stockMovements';
+
 export interface IDataService {
   // Products
-  getProducts(): Promise<Product[]>;
+  getProducts(forceRefresh?: boolean): Promise<Product[]>;
   getProductById(id: string): Promise<Product | undefined>;
   createProduct(product: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Promise<Product>;
   updateProduct(id: string, updates: Partial<Product>): Promise<Product>;
   deleteProduct(id: string): Promise<void>;
 
   // Customers
-  getCustomers(): Promise<Customer[]>;
+  getCustomers(forceRefresh?: boolean): Promise<Customer[]>;
   createCustomer(customer: Omit<Customer, 'id' | 'createdAt' | 'totalPurchases' | 'outstandingBalance'>): Promise<Customer>;
   updateCustomer(id: string, updates: Partial<Customer>): Promise<Customer>;
   deleteCustomer(id: string): Promise<void>;
 
   // Suppliers
-  getSuppliers(): Promise<Supplier[]>;
+  getSuppliers(forceRefresh?: boolean): Promise<Supplier[]>;
   createSupplier(supplier: Omit<Supplier, 'id' | 'createdAt' | 'balanceDue'>): Promise<Supplier>;
   updateSupplier(id: string, updates: Partial<Supplier>): Promise<Supplier>;
   deleteSupplier(id: string): Promise<void>;
 
   // Sales & POS
-  getSales(): Promise<Sale[]>;
+  getSales(forceRefresh?: boolean): Promise<Sale[]>;
   getSaleById(id: string): Promise<Sale | undefined>;
   createSale(saleData: Omit<Sale, 'id' | 'createdAt' | 'invoiceNumber'>): Promise<Sale>;
 
   // Purchases
-  getPurchases(): Promise<Purchase[]>;
+  getPurchases(forceRefresh?: boolean): Promise<Purchase[]>;
   createPurchase(purchaseData: Omit<Purchase, 'id' | 'createdAt' | 'poNumber' | 'status'>): Promise<Purchase>;
   receivePurchase(id: string): Promise<Purchase>;
   updatePurchasePaymentStatus(id: string, paymentStatus: 'Paid' | 'Pending' | 'Partial'): Promise<Purchase>;
 
   // Expenses
-  getExpenses(): Promise<Expense[]>;
+  getExpenses(forceRefresh?: boolean): Promise<Expense[]>;
   createExpense(expense: Omit<Expense, 'id' | 'createdAt' | 'expenseNumber'>): Promise<Expense>;
   deleteExpense(id: string): Promise<void>;
 
   // Stock Adjustments
-  getStockMovements(): Promise<StockMovement[]>;
+  getStockMovements(forceRefresh?: boolean): Promise<StockMovement[]>;
   adjustStock(productId: string, quantityChange: number, type: 'IN' | 'OUT' | 'ADJUSTMENT' | 'DAMAGE', reason: string): Promise<void>;
 
   // Stats & Stock Alerts
   getDashboardStats(): Promise<DashboardStats>;
   getStockAlertCounts(): Promise<{ low: number; out: number }>;
+
+  // Cache Management
+  invalidateCache(entity?: CacheEntity): void;
 }
 
 // Purge any legacy offline/mock database stores from browser localStorage
@@ -79,7 +92,47 @@ try {
   // ignore
 }
 
+interface MemoryCache {
+  products: Product[] | null;
+  customers: Customer[] | null;
+  suppliers: Supplier[] | null;
+  sales: Sale[] | null;
+  purchases: Purchase[] | null;
+  expenses: Expense[] | null;
+  stockMovements: StockMovement[] | null;
+}
+
 class SupabaseDataServiceImpl implements IDataService {
+  /**
+   * In-Memory Cache: keeps data in RAM during user session to prevent
+   * repetitive network fetches when navigating between pages.
+   */
+  private cache: MemoryCache = {
+    products: null,
+    customers: null,
+    suppliers: null,
+    sales: null,
+    purchases: null,
+    expenses: null,
+    stockMovements: null,
+  };
+
+  public invalidateCache(entity?: CacheEntity): void {
+    if (entity) {
+      this.cache[entity] = null;
+    } else {
+      this.cache = {
+        products: null,
+        customers: null,
+        suppliers: null,
+        sales: null,
+        purchases: null,
+        expenses: null,
+        stockMovements: null,
+      };
+    }
+  }
+
   /**
    * Enforce authentication gate on every data access route/call.
    */
@@ -107,12 +160,19 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // PRODUCTS (Live Supabase Cloud Database)
+  // PRODUCTS (Live Supabase Cloud Database + In-Memory Cache)
   // ==========================================
-  async getProducts(): Promise<Product[]> {
+  async getProducts(forceRefresh = false): Promise<Product[]> {
     this.ensureAuthenticated();
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.products !== null) {
+      if (this.getActiveRole() === 'staff') {
+        return this.cache.products.map(p => ({ ...p, costPrice: 0 }));
+      }
+      return [...this.cache.products];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -124,8 +184,8 @@ class SupabaseDataServiceImpl implements IDataService {
     }
 
     const rawList = (data || []).map(p => this.mapProductFromDb(p));
+    this.cache.products = rawList;
 
-    // Role-based protection: Redact wholesale cost price from staff
     if (this.getActiveRole() === 'staff') {
       return rawList.map(p => ({
         ...p,
@@ -133,13 +193,20 @@ class SupabaseDataServiceImpl implements IDataService {
       }));
     }
 
-    return rawList;
+    return [...rawList];
   }
 
   async getProductById(id: string): Promise<Product | undefined> {
     this.ensureAuthenticated();
-    const supabase = getRequiredSupabase();
 
+    if (this.cache.products !== null) {
+      const found = this.cache.products.find(p => p.id === id);
+      if (found) {
+        return this.getActiveRole() === 'staff' ? { ...found, costPrice: 0 } : { ...found };
+      }
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -154,6 +221,10 @@ class SupabaseDataServiceImpl implements IDataService {
     if (!data) return undefined;
 
     const prod = this.mapProductFromDb(data);
+    if (this.cache.products && !this.cache.products.some(p => p.id === prod.id)) {
+      this.cache.products = [prod, ...this.cache.products];
+    }
+
     if (this.getActiveRole() === 'staff') {
       return { ...prod, costPrice: 0 };
     }
@@ -162,6 +233,9 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async createProduct(productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'status'>): Promise<Product> {
     this.ensureAuthenticated();
+    // Rate limit: max 20 products per minute
+    rateLimiter.enforceLimit('create_product_limit', 20, 60 * 1000, 'create products');
+
     const now = new Date().toISOString();
     const id = `prod_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const status = productData.stockQuantity <= 0 ? 'out_of_stock' : productData.stockQuantity <= productData.minStockLevel ? 'low_stock' : 'in_stock';
@@ -174,9 +248,18 @@ class SupabaseDataServiceImpl implements IDataService {
       updatedAt: now,
     };
 
+    // Update in-memory cache immediately
+    if (this.cache.products) {
+      this.cache.products = [newProduct, ...this.cache.products];
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('products').insert(this.mapProductToDb(newProduct));
     if (error) {
+      // Rollback cache if network insert failed
+      if (this.cache.products) {
+        this.cache.products = this.cache.products.filter(p => p.id !== id);
+      }
       console.error('Supabase createProduct error:', error);
       throw new Error(`Failed to create product in cloud database: ${error.message}`);
     }
@@ -202,6 +285,11 @@ class SupabaseDataServiceImpl implements IDataService {
       updatedAt: new Date().toISOString(),
     };
 
+    // Update in-memory cache immediately
+    if (this.cache.products) {
+      this.cache.products = this.cache.products.map(p => p.id === id ? updatedProduct : p);
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase
       .from('products')
@@ -209,6 +297,10 @@ class SupabaseDataServiceImpl implements IDataService {
       .eq('id', id);
 
     if (error) {
+      // Rollback cache if network update failed
+      if (this.cache.products) {
+        this.cache.products = this.cache.products.map(p => p.id === id ? existing : p);
+      }
       console.error('Supabase updateProduct error:', error);
       throw new Error(`Failed to update product in cloud database: ${error.message}`);
     }
@@ -218,21 +310,37 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async deleteProduct(id: string): Promise<void> {
     this.ensureAuthenticated();
+    // Rate limit: max 15 deletions per 30 seconds
+    rateLimiter.enforceLimit('delete_product_limit', 15, 30 * 1000, 'delete products');
+
+    // 1. Instantly delete from local memory cache for immediate UI responsiveness
+    const prevProducts = this.cache.products;
+    if (this.cache.products) {
+      this.cache.products = this.cache.products.filter(p => p.id !== id);
+    }
+
+    // 2. Delete from Supabase cloud database
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) {
+      // Rollback cache if database deletion failed
+      this.cache.products = prevProducts;
       console.error('Supabase deleteProduct error:', error);
       throw new Error(`Failed to delete product from cloud database: ${error.message}`);
     }
   }
 
   // ==========================================
-  // CUSTOMERS (Live Supabase Cloud Database)
+  // CUSTOMERS (Live Supabase Cloud Database + In-Memory Cache)
   // ==========================================
-  async getCustomers(): Promise<Customer[]> {
+  async getCustomers(forceRefresh = false): Promise<Customer[]> {
     this.ensureAuthenticated();
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.customers !== null) {
+      return [...this.cache.customers];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('customers')
       .select('*')
@@ -243,7 +351,9 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load customers from cloud database: ${error.message}`);
     }
 
-    return (data || []).map(c => this.mapCustomerFromDb(c));
+    const list = (data || []).map(c => this.mapCustomerFromDb(c));
+    this.cache.customers = list;
+    return [...list];
   }
 
   async createCustomer(data: Omit<Customer, 'id' | 'createdAt' | 'totalPurchases' | 'outstandingBalance'>): Promise<Customer> {
@@ -257,9 +367,18 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
+    // Update in-memory cache immediately
+    if (this.cache.customers) {
+      this.cache.customers = [customer, ...this.cache.customers];
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('customers').insert(this.mapCustomerToDb(customer));
     if (error) {
+      // Rollback cache if insert failed
+      if (this.cache.customers) {
+        this.cache.customers = this.cache.customers.filter(c => c.id !== customer.id);
+      }
       console.error('Supabase createCustomer error:', error);
       throw new Error(`Failed to create customer in cloud database: ${error.message}`);
     }
@@ -271,18 +390,26 @@ class SupabaseDataServiceImpl implements IDataService {
     this.ensureAuthenticated();
     const supabase = getRequiredSupabase();
 
-    const { data: existing, error: getErr } = await supabase
-      .from('customers')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const existing = this.cache.customers?.find(c => c.id === id) || await (async () => {
+      const { data: row, error: getErr } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (getErr || !row) return null;
+      return this.mapCustomerFromDb(row);
+    })();
 
-    if (getErr || !existing) {
+    if (!existing) {
       throw new Error('Customer not found in cloud database.');
     }
 
-    const mapped = this.mapCustomerFromDb(existing);
-    const updated = { ...mapped, ...updates };
+    const updated = { ...existing, ...updates };
+
+    // Update in-memory cache immediately
+    if (this.cache.customers) {
+      this.cache.customers = this.cache.customers.map(c => c.id === id ? updated : c);
+    }
 
     const { error } = await supabase
       .from('customers')
@@ -290,6 +417,9 @@ class SupabaseDataServiceImpl implements IDataService {
       .eq('id', id);
 
     if (error) {
+      if (this.cache.customers) {
+        this.cache.customers = this.cache.customers.map(c => c.id === id ? existing : c);
+      }
       console.error('Supabase updateCustomer error:', error);
       throw new Error(`Failed to update customer in cloud database: ${error.message}`);
     }
@@ -299,21 +429,36 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async deleteCustomer(id: string): Promise<void> {
     this.ensureAuthenticated();
+    // Rate limit: max 15 deletions per 30 seconds
+    rateLimiter.enforceLimit('delete_customer_limit', 15, 30 * 1000, 'delete customers');
+
+    // 1. Instantly delete from local memory cache
+    const prevCustomers = this.cache.customers;
+    if (this.cache.customers) {
+      this.cache.customers = this.cache.customers.filter(c => c.id !== id);
+    }
+
+    // 2. Delete from Supabase cloud database
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('customers').delete().eq('id', id);
     if (error) {
+      this.cache.customers = prevCustomers;
       console.error('Supabase deleteCustomer error:', error);
       throw new Error(`Failed to delete customer from cloud database: ${error.message}`);
     }
   }
 
   // ==========================================
-  // SUPPLIERS (Admin-Only Live Supabase)
+  // SUPPLIERS (Admin-Only Live Supabase + In-Memory Cache)
   // ==========================================
-  async getSuppliers(): Promise<Supplier[]> {
+  async getSuppliers(forceRefresh = false): Promise<Supplier[]> {
     this.ensureAdminRole('view supplier contacts and trade balances');
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.suppliers !== null) {
+      return [...this.cache.suppliers];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('suppliers')
       .select('*')
@@ -324,7 +469,9 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load suppliers from cloud database: ${error.message}`);
     }
 
-    return (data || []).map(s => this.mapSupplierFromDb(s));
+    const list = (data || []).map(s => this.mapSupplierFromDb(s));
+    this.cache.suppliers = list;
+    return [...list];
   }
 
   async createSupplier(data: Omit<Supplier, 'id' | 'createdAt' | 'balanceDue'>): Promise<Supplier> {
@@ -336,9 +483,17 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: new Date().toISOString(),
     };
 
+    // Update in-memory cache immediately
+    if (this.cache.suppliers) {
+      this.cache.suppliers = [supplier, ...this.cache.suppliers];
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('suppliers').insert(this.mapSupplierToDb(supplier));
     if (error) {
+      if (this.cache.suppliers) {
+        this.cache.suppliers = this.cache.suppliers.filter(s => s.id !== supplier.id);
+      }
       console.error('Supabase createSupplier error:', error);
       throw new Error(`Failed to create supplier in cloud database: ${error.message}`);
     }
@@ -350,18 +505,26 @@ class SupabaseDataServiceImpl implements IDataService {
     this.ensureAdminRole('update supplier profiles');
     const supabase = getRequiredSupabase();
 
-    const { data: existing, error: getErr } = await supabase
-      .from('suppliers')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const existing = this.cache.suppliers?.find(s => s.id === id) || await (async () => {
+      const { data: row, error: getErr } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (getErr || !row) return null;
+      return this.mapSupplierFromDb(row);
+    })();
 
-    if (getErr || !existing) {
+    if (!existing) {
       throw new Error('Supplier not found in cloud database.');
     }
 
-    const mapped = this.mapSupplierFromDb(existing);
-    const updated = { ...mapped, ...updates };
+    const updated = { ...existing, ...updates };
+
+    // Update in-memory cache immediately
+    if (this.cache.suppliers) {
+      this.cache.suppliers = this.cache.suppliers.map(s => s.id === id ? updated : s);
+    }
 
     const { error } = await supabase
       .from('suppliers')
@@ -369,6 +532,9 @@ class SupabaseDataServiceImpl implements IDataService {
       .eq('id', id);
 
     if (error) {
+      if (this.cache.suppliers) {
+        this.cache.suppliers = this.cache.suppliers.map(s => s.id === id ? existing : s);
+      }
       console.error('Supabase updateSupplier error:', error);
       throw new Error(`Failed to update supplier in cloud database: ${error.message}`);
     }
@@ -378,21 +544,36 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async deleteSupplier(id: string): Promise<void> {
     this.ensureAdminRole('delete suppliers');
+    // Rate limit: max 15 deletions per 30 seconds
+    rateLimiter.enforceLimit('delete_supplier_limit', 15, 30 * 1000, 'delete suppliers');
+
+    // 1. Instantly delete from local memory cache
+    const prevSuppliers = this.cache.suppliers;
+    if (this.cache.suppliers) {
+      this.cache.suppliers = this.cache.suppliers.filter(s => s.id !== id);
+    }
+
+    // 2. Delete from Supabase cloud database
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('suppliers').delete().eq('id', id);
     if (error) {
+      this.cache.suppliers = prevSuppliers;
       console.error('Supabase deleteSupplier error:', error);
       throw new Error(`Failed to delete supplier from cloud database: ${error.message}`);
     }
   }
 
   // ==========================================
-  // SALES & POS (Live Supabase Cloud Database)
+  // SALES & POS (Live Supabase Cloud Database + In-Memory Cache)
   // ==========================================
-  async getSales(): Promise<Sale[]> {
+  async getSales(forceRefresh = false): Promise<Sale[]> {
     this.ensureAuthenticated();
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.sales !== null) {
+      return [...this.cache.sales];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('sales')
       .select('*')
@@ -403,13 +584,20 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load sales from cloud database: ${error.message}`);
     }
 
-    return (data || []).map(s => this.mapSaleFromDb(s));
+    const list = (data || []).map(s => this.mapSaleFromDb(s));
+    this.cache.sales = list;
+    return [...list];
   }
 
   async getSaleById(id: string): Promise<Sale | undefined> {
     this.ensureAuthenticated();
-    const supabase = getRequiredSupabase();
 
+    if (this.cache.sales !== null) {
+      const found = this.cache.sales.find(s => s.id === id);
+      if (found) return { ...found };
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('sales')
       .select('*')
@@ -426,6 +614,11 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async createSale(saleData: Omit<Sale, 'id' | 'createdAt' | 'invoiceNumber'>): Promise<Sale> {
     this.ensureAuthenticated();
+    // Anti-double-submit debounce (1.5 seconds) to prevent accidental duplicate customer charges
+    rateLimiter.checkMinInterval('sale_checkout_debounce', 1500, 'sale invoice transaction');
+    // Rate limit: max 15 sales invoices per minute
+    rateLimiter.enforceLimit('create_sale_limit', 15, 60 * 1000, 'create sales invoices');
+
     const now = new Date().toISOString();
     const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
     const sale: Sale = {
@@ -437,7 +630,7 @@ class SupabaseDataServiceImpl implements IDataService {
 
     const supabase = getRequiredSupabase();
 
-    // 1. Deduct Stock for sold items in Supabase
+    // 1. Deduct Stock for sold items in Supabase & in-memory cache
     for (const item of sale.items) {
       await this.adjustStock(
         item.productId,
@@ -447,24 +640,34 @@ class SupabaseDataServiceImpl implements IDataService {
       );
     }
 
-    // 2. Insert Sale record into Supabase
+    // 2. Add to in-memory cache immediately
+    if (this.cache.sales) {
+      this.cache.sales = [sale, ...this.cache.sales];
+    }
+
+    // 3. Insert Sale record into Supabase
     const { error } = await supabase.from('sales').insert(this.mapSaleToDb(sale));
     if (error) {
+      if (this.cache.sales) {
+        this.cache.sales = this.cache.sales.filter(s => s.id !== sale.id);
+      }
       console.error('Supabase createSale error:', error);
       throw new Error(`Failed to save invoice in cloud database: ${error.message}`);
     }
 
-    // 3. Update customer purchase balance if customerId provided
+    // 4. Update customer purchase balance if customerId provided
     if (sale.customerId) {
       try {
-        const { data: custRow } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('id', sale.customerId)
-          .maybeSingle();
+        const customer = this.cache.customers?.find(c => c.id === sale.customerId) || await (async () => {
+          const { data: custRow } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('id', sale.customerId)
+            .maybeSingle();
+          return custRow ? this.mapCustomerFromDb(custRow) : null;
+        })();
 
-        if (custRow) {
-          const customer = this.mapCustomerFromDb(custRow);
+        if (customer) {
           const outstanding = sale.paymentStatus === 'Pending' 
             ? customer.outstandingBalance + sale.grandTotal 
             : customer.outstandingBalance;
@@ -483,12 +686,16 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // PURCHASES (INWARD STOCK - Admin Only)
+  // PURCHASES (INWARD STOCK - Admin Only + In-Memory Cache)
   // ==========================================
-  async getPurchases(): Promise<Purchase[]> {
+  async getPurchases(forceRefresh = false): Promise<Purchase[]> {
     this.ensureAdminRole('view supplier purchase orders');
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.purchases !== null) {
+      return [...this.cache.purchases];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('purchases')
       .select('*')
@@ -499,11 +706,18 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load purchases from cloud database: ${error.message}`);
     }
 
-    return (data || []).map(p => this.mapPurchaseFromDb(p));
+    const list = (data || []).map(p => this.mapPurchaseFromDb(p));
+    this.cache.purchases = list;
+    return [...list];
   }
 
   async createPurchase(data: Omit<Purchase, 'id' | 'createdAt' | 'poNumber' | 'status'>): Promise<Purchase> {
     this.ensureAdminRole('create supplier purchase orders');
+    // Anti-double-submit debounce (1.5 seconds)
+    rateLimiter.checkMinInterval('purchase_submit_debounce', 1500, 'purchase order');
+    // Rate limit: max 15 purchases per minute
+    rateLimiter.enforceLimit('create_purchase_limit', 15, 60 * 1000, 'create purchase orders');
+
     const now = new Date().toISOString();
     const poNumber = `PO-${Date.now().toString().slice(-6)}`;
     const purchase: Purchase = {
@@ -514,9 +728,17 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
+    // Update in-memory cache immediately
+    if (this.cache.purchases) {
+      this.cache.purchases = [purchase, ...this.cache.purchases];
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('purchases').insert(this.mapPurchaseToDb(purchase));
     if (error) {
+      if (this.cache.purchases) {
+        this.cache.purchases = this.cache.purchases.filter(p => p.id !== purchase.id);
+      }
       console.error('Supabase createPurchase error:', error);
       throw new Error(`Failed to save purchase order in cloud database: ${error.message}`);
     }
@@ -526,36 +748,45 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async receivePurchase(id: string): Promise<Purchase> {
     this.ensureAdminRole('receive inward purchase orders');
+    rateLimiter.checkMinInterval(`receive_purchase_${id}`, 2000, 'inward stock receipt');
     const supabase = getRequiredSupabase();
 
-    const { data: row, error: getErr } = await supabase
-      .from('purchases')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const existing = this.cache.purchases?.find(p => p.id === id) || await (async () => {
+      const { data: row, error: getErr } = await supabase
+        .from('purchases')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (getErr || !row) return null;
+      return this.mapPurchaseFromDb(row);
+    })();
 
-    if (getErr || !row) {
+    if (!existing) {
       throw new Error('Purchase order not found in cloud database.');
     }
 
-    const purchase = this.mapPurchaseFromDb(row);
-    if (purchase.status === 'Received') return purchase;
+    if (existing.status === 'Received') return existing;
 
-    // Inward stock adjustment for received items in Supabase
-    for (const item of purchase.items) {
+    // Inward stock adjustment for received items in Supabase & cache
+    for (const item of existing.items) {
       await this.adjustStock(
         item.productId,
         item.quantity,
         'IN',
-        `Received via Purchase Order #${purchase.poNumber}`
+        `Received via Purchase Order #${existing.poNumber}`
       );
     }
 
     const updated: Purchase = {
-      ...purchase,
+      ...existing,
       status: 'Received',
       receivedDate: new Date().toISOString(),
     };
+
+    // Update in-memory cache immediately
+    if (this.cache.purchases) {
+      this.cache.purchases = this.cache.purchases.map(p => p.id === id ? updated : p);
+    }
 
     const { error } = await supabase
       .from('purchases')
@@ -563,6 +794,9 @@ class SupabaseDataServiceImpl implements IDataService {
       .eq('id', id);
 
     if (error) {
+      if (this.cache.purchases) {
+        this.cache.purchases = this.cache.purchases.map(p => p.id === id ? existing : p);
+      }
       console.error('Supabase receivePurchase error:', error);
       throw new Error(`Failed to update purchase order in cloud database: ${error.message}`);
     }
@@ -574,21 +808,29 @@ class SupabaseDataServiceImpl implements IDataService {
     this.ensureAdminRole('update purchase order payment statuses');
     const supabase = getRequiredSupabase();
 
-    const { data: row, error: getErr } = await supabase
-      .from('purchases')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+    const existing = this.cache.purchases?.find(p => p.id === id) || await (async () => {
+      const { data: row, error: getErr } = await supabase
+        .from('purchases')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (getErr || !row) return null;
+      return this.mapPurchaseFromDb(row);
+    })();
 
-    if (getErr || !row) {
+    if (!existing) {
       throw new Error('Purchase order not found in cloud database.');
     }
 
-    const purchase = this.mapPurchaseFromDb(row);
     const updated: Purchase = {
-      ...purchase,
+      ...existing,
       paymentStatus,
     };
+
+    // Update in-memory cache immediately
+    if (this.cache.purchases) {
+      this.cache.purchases = this.cache.purchases.map(p => p.id === id ? updated : p);
+    }
 
     const { error } = await supabase
       .from('purchases')
@@ -596,6 +838,9 @@ class SupabaseDataServiceImpl implements IDataService {
       .eq('id', id);
 
     if (error) {
+      if (this.cache.purchases) {
+        this.cache.purchases = this.cache.purchases.map(p => p.id === id ? existing : p);
+      }
       console.error('Supabase updatePurchasePaymentStatus error:', error);
       throw new Error(`Failed to update purchase payment status in cloud database: ${error.message}`);
     }
@@ -604,12 +849,16 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // EXPENSES (Admin Only - Live Supabase)
+  // EXPENSES (Admin Only - Live Supabase + In-Memory Cache)
   // ==========================================
-  async getExpenses(): Promise<Expense[]> {
+  async getExpenses(forceRefresh = false): Promise<Expense[]> {
     this.ensureAdminRole('view showroom expenses');
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.expenses !== null) {
+      return [...this.cache.expenses];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('expenses')
       .select('*')
@@ -620,11 +869,16 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load expenses from cloud database: ${error.message}`);
     }
 
-    return (data || []).map(e => this.mapExpenseFromDb(e));
+    const list = (data || []).map(e => this.mapExpenseFromDb(e));
+    this.cache.expenses = list;
+    return [...list];
   }
 
   async createExpense(data: Omit<Expense, 'id' | 'createdAt' | 'expenseNumber'>): Promise<Expense> {
     this.ensureAdminRole('record showroom expenses');
+    // Rate limit: max 20 expenses per minute
+    rateLimiter.enforceLimit('create_expense_limit', 20, 60 * 1000, 'record showroom expenses');
+
     const now = new Date().toISOString();
     const expenseNumber = `EXP-${Date.now().toString().slice(-6)}`;
     const expense: Expense = {
@@ -634,9 +888,17 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
+    // Update in-memory cache immediately
+    if (this.cache.expenses) {
+      this.cache.expenses = [expense, ...this.cache.expenses];
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('expenses').insert(this.mapExpenseToDb(expense));
     if (error) {
+      if (this.cache.expenses) {
+        this.cache.expenses = this.cache.expenses.filter(e => e.id !== expense.id);
+      }
       console.error('Supabase createExpense error:', error);
       throw new Error(`Failed to save expense in cloud database: ${error.message}`);
     }
@@ -646,21 +908,36 @@ class SupabaseDataServiceImpl implements IDataService {
 
   async deleteExpense(id: string): Promise<void> {
     this.ensureAdminRole('delete showroom expenses');
+    // Rate limit: max 15 deletions per 30 seconds
+    rateLimiter.enforceLimit('delete_expense_limit', 15, 30 * 1000, 'delete showroom expenses');
+
+    // 1. Instantly delete from local memory cache
+    const prevExpenses = this.cache.expenses;
+    if (this.cache.expenses) {
+      this.cache.expenses = this.cache.expenses.filter(e => e.id !== id);
+    }
+
+    // 2. Delete from Supabase cloud database
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('expenses').delete().eq('id', id);
     if (error) {
+      this.cache.expenses = prevExpenses;
       console.error('Supabase deleteExpense error:', error);
       throw new Error(`Failed to delete expense from cloud database: ${error.message}`);
     }
   }
 
   // ==========================================
-  // STOCK ADJUSTMENTS & MOVEMENTS
+  // STOCK ADJUSTMENTS & MOVEMENTS (In-Memory Cache + Supabase)
   // ==========================================
-  async getStockMovements(): Promise<StockMovement[]> {
+  async getStockMovements(forceRefresh = false): Promise<StockMovement[]> {
     this.ensureAuthenticated();
-    const supabase = getRequiredSupabase();
 
+    if (!forceRefresh && this.cache.stockMovements !== null) {
+      return [...this.cache.stockMovements];
+    }
+
+    const supabase = getRequiredSupabase();
     const { data, error } = await supabase
       .from('stock_movements')
       .select('*')
@@ -671,7 +948,9 @@ class SupabaseDataServiceImpl implements IDataService {
       throw new Error(`Failed to load stock movements from cloud database: ${error.message}`);
     }
 
-    return (data || []).map(m => this.mapMovementFromDb(m));
+    const list = (data || []).map(m => this.mapMovementFromDb(m));
+    this.cache.stockMovements = list;
+    return [...list];
   }
 
   async adjustStock(
@@ -681,6 +960,9 @@ class SupabaseDataServiceImpl implements IDataService {
     reason: string
   ): Promise<void> {
     this.ensureAuthenticated();
+    // Rate limit: max 30 stock adjustments per minute
+    rateLimiter.enforceLimit('adjust_stock_limit', 30, 60 * 1000, 'perform stock adjustments');
+
     const product = await this.getProductById(productId);
     if (!product) return;
 
@@ -703,6 +985,10 @@ class SupabaseDataServiceImpl implements IDataService {
       date: new Date().toISOString(),
     };
 
+    if (this.cache.stockMovements) {
+      this.cache.stockMovements = [movement, ...this.cache.stockMovements];
+    }
+
     const supabase = getRequiredSupabase();
     const { error } = await supabase.from('stock_movements').insert(this.mapMovementToDb(movement, product.sku));
     if (error) {
@@ -711,7 +997,7 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   // ==========================================
-  // DASHBOARD STATS (Admin Only)
+  // DASHBOARD STATS (Admin Only - Resets Today's Sales Every Day at Midnight)
   // ==========================================
   async getDashboardStats(): Promise<DashboardStats> {
     this.ensureAdminRole('view showroom financial dashboard and net profit metrics');
@@ -719,10 +1005,22 @@ class SupabaseDataServiceImpl implements IDataService {
     const sales = await this.getSales();
     const expenses = await this.getExpenses();
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todaySales = sales.filter(s => s.createdAt.startsWith(todayStr));
-    const todaySalesTotal = todaySales.reduce((acc, s) => acc + (s.grandTotal || 0), 0);
+    // Client's local calendar date comparison (resets strictly every day at local 00:00 midnight)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentDate = now.getDate();
 
+    const todaySales = sales.filter(s => {
+      const d = new Date(s.createdAt);
+      return (
+        d.getFullYear() === currentYear &&
+        d.getMonth() === currentMonth &&
+        d.getDate() === currentDate
+      );
+    });
+
+    const todaySalesTotal = todaySales.reduce((acc, s) => acc + (s.grandTotal || 0), 0);
     const monthlySalesTotal = sales.reduce((acc, s) => acc + (s.grandTotal || 0), 0);
     const monthlyExpensesTotal = expenses.reduce((acc, e) => acc + (e.amount || 0), 0);
 
