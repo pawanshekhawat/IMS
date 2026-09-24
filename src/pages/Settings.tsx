@@ -13,7 +13,6 @@ import {
   EyeOff,
   KeyRound,
   Clock,
-  Timer,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
@@ -25,7 +24,7 @@ import { authService } from '../services/authService';
 import { updateService, type UpdateInfo } from '../services/updateService';
 
 export const Settings: React.FC = () => {
-  const { user, updateDisplayName, extendSession, sessionRemainingMs } = useAuth();
+  const { user, updateDisplayName } = useAuth();
   const [adminDisplayName, setAdminDisplayName] = useState(
     user?.displayName || 'Himanshu Choudhary (Owner)'
   );
@@ -39,23 +38,6 @@ export const Settings: React.FC = () => {
   const [customTimeoutInput, setCustomTimeoutInput] = useState<string>(String(authService.getAdminTimeoutMinutes()));
   const [timeoutFeedback, setTimeoutFeedback] = useState<string | null>(null);
 
-  const [localRemainingMs, setLocalRemainingMs] = useState<number | null>(() => {
-    return user?.expiresAt ? Math.max(0, user.expiresAt - Date.now()) : null;
-  });
-
-  useEffect(() => {
-    const updateCountdown = () => {
-      if (user?.expiresAt) {
-        setLocalRemainingMs(Math.max(0, user.expiresAt - Date.now()));
-      } else {
-        setLocalRemainingMs(null);
-      }
-    };
-    updateCountdown();
-    const timer = setInterval(updateCountdown, 1000);
-    return () => clearInterval(timer);
-  }, [user?.expiresAt]);
-
   const handleSetTimeout = (mins: number) => {
     authService.setAdminTimeoutMinutes(mins);
     setAdminTimeoutMins(mins);
@@ -63,7 +45,7 @@ export const Settings: React.FC = () => {
     const label = mins >= 60 && mins % 60 === 0 
       ? `${mins / 60} hour${mins / 60 > 1 ? 's' : ''}` 
       : `${mins} minute${mins > 1 ? 's' : ''}`;
-    setTimeoutFeedback(`Admin auto-logout set to ${label}. Your session will automatically close after this time.`);
+    setTimeoutFeedback(`Closed-app auto-logout duration set to ${label}. If the app is closed for over ${label}, you will be asked to sign in upon opening.`);
     setTimeout(() => setTimeoutFeedback(null), 5000);
   };
 
@@ -73,25 +55,6 @@ export const Settings: React.FC = () => {
     if (!isNaN(parsed) && parsed > 0) {
       handleSetTimeout(parsed);
     }
-  };
-
-  const handleExtendSession = () => {
-    extendSession(60);
-    setTimeoutFeedback('Admin session successfully renewed and extended by 1 hour!');
-    setTimeout(() => setTimeoutFeedback(null), 4000);
-  };
-
-  const formatRemainingTime = (ms: number | null) => {
-    if (ms === null) return 'Active';
-    if (ms <= 0) return 'Session Expired';
-    const totalSecs = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSecs / 3600);
-    const mins = Math.floor((totalSecs % 3600) / 60);
-    const secs = totalSecs % 60;
-    if (hours > 0) {
-      return `${hours}h ${mins}m ${secs}s`;
-    }
-    return `${mins}m ${secs}s`;
   };
 
   useEffect(() => {
@@ -204,7 +167,7 @@ export const Settings: React.FC = () => {
     }
   };
   const defaultStoreInfo = {
-    name: 'Garhwal Lights - Retail & Showroom',
+    name: 'Garhwal Lights',
     tagline: 'Premium Architectural & Decorative Lighting',
     gstin: '05AAACG1234F1Z8',
     phone: '+91 98970 12345',
@@ -217,8 +180,16 @@ export const Settings: React.FC = () => {
       const saved = localStorage.getItem('store_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
+        let modified = false;
         if (parsed.address && (parsed.address.includes('Dehradun') || parsed.address.includes('Rajpur Road'))) {
           parsed.address = 'Shivam Heights, Ramlila Maidan, Tilak Nagar, Sikar, Rajasthan 332001';
+          modified = true;
+        }
+        if (parsed.name && /retail\s*&\s*showroom/i.test(parsed.name)) {
+          parsed.name = parsed.name.replace(/\s*-\s*Retail\s*&\s*Showroom/gi, '').replace(/\s*Retail\s*&\s*Showroom/gi, '').trim() || 'Garhwal Lights';
+          modified = true;
+        }
+        if (modified) {
           localStorage.setItem('store_profile', JSON.stringify(parsed));
         }
         return { ...defaultStoreInfo, ...parsed };
@@ -767,13 +738,13 @@ export const Settings: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                      Auto-Logout & Session Timer
+                      Closed-App Auto-Logout Timer
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)' }}>
-                      Logs out admin after 1 hour or your custom duration
+                      Never logs out while using the app • Countdown starts only after app is closed
                     </div>
                   </div>
-                  <Badge variant="warning">
+                  <Badge variant="success">
                     <Clock size={12} style={{ marginRight: '4px', verticalAlign: '-1px' }} />
                     {adminTimeoutMins >= 60 && adminTimeoutMins % 60 === 0 
                       ? `${adminTimeoutMins / 60} Hour${adminTimeoutMins / 60 > 1 ? 's' : ''}` 
@@ -781,32 +752,27 @@ export const Settings: React.FC = () => {
                   </Badge>
                 </div>
 
-                {/* Active Session Countdown Info */}
+                {/* Active Session Status */}
                 <div style={{
-                  padding: '10px 14px',
-                  backgroundColor: 'var(--color-neutral-100)',
+                  padding: '12px 14px',
+                  backgroundColor: '#f0fdf4',
                   borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--color-neutral-300)',
+                  border: '1px solid #bbf7d0',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '8px',
+                  gap: '10px',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Timer size={16} color="var(--color-primary-800)" />
-                    <span style={{ fontSize: '12px', color: 'var(--color-neutral-700)' }}>
-                      Session remaining: <strong>{formatRemainingTime(localRemainingMs ?? sessionRemainingMs)}</strong>
-                    </span>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: '#16a34a',
+                    flexShrink: 0,
+                    boxShadow: '0 0 8px rgba(22, 163, 74, 0.6)',
+                  }} />
+                  <div style={{ fontSize: '12px', color: '#166534', lineHeight: 1.4 }}>
+                    <strong>Active in App:</strong> You will not be logged out while using the app. The <strong>{adminTimeoutMins >= 60 && adminTimeoutMins % 60 === 0 ? `${adminTimeoutMins / 60} hour` : `${adminTimeoutMins} minute`}</strong> countdown only begins after you close the app.
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outlined"
-                    onClick={handleExtendSession}
-                    style={{ fontSize: '11px', padding: '4px 10px', height: '28px' }}
-                  >
-                    +1 Hr Extend
-                  </Button>
                 </div>
 
                 {/* Preset Time Buttons */}

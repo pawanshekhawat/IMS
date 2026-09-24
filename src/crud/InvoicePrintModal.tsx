@@ -41,6 +41,13 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
     };
   })();
 
+  const cleanStoreName = (storeProfile.name || 'Garhwal Lights')
+    .replace(/\s*-\s*Retail\s*&\s*Showroom/gi, '')
+    .replace(/\s*-\s*Retail\s*Showroom/gi, '')
+    .replace(/\s*Retail\s*&\s*Showroom/gi, '')
+    .replace(/\s*Retail\s*Showroom/gi, '')
+    .trim() || 'Garhwal Lights';
+
   const handlePrint = () => {
     window.print();
   };
@@ -311,7 +318,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
               <div style={{ textAlign: 'center' }}>
                 <div style={{ width: '150px', height: '40px', borderBottom: '1px solid #111827', margin: '0 auto 4px auto' }} />
-                <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block' }}>For {storeProfile.name || 'Garhwal Lights'}</span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block' }}>For {cleanStoreName}</span>
                 <span style={{ fontSize: '10px', color: '#6B7280', display: 'block' }}>Retail Showroom</span>
               </div>
             </div>

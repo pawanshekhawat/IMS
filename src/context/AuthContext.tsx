@@ -31,12 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    if (active.expiresAt && Date.now() > active.expiresAt) {
-      logout();
-      return;
-    }
-
-    if (!user || user.id !== active.id || user.expiresAt !== active.expiresAt) {
+    if (!user || user.id !== active.id) {
       setUser(active);
     }
   };
@@ -45,20 +40,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkSessionValidity();
     setIsLoading(false);
 
-    // Heartbeat check every 3 seconds for auto-logout enforcement
-    const interval = setInterval(checkSessionValidity, 3000);
+    // 1. Keep session active while user is in the app (heartbeat every 5s)
+    const heartbeatInterval = setInterval(() => {
+      if (user?.role === 'admin') {
+        authService.recordHeartbeat();
+      }
+    }, 5000);
 
-    const onVisibilityOrFocus = () => {
-      checkSessionValidity();
+    // 2. Track when user closes or leaves the app so the 1-hour grace timer starts
+    const onAppClosed = () => {
+      if (user?.role === 'admin') {
+        authService.recordAppClosed();
+      }
     };
 
-    window.addEventListener('focus', onVisibilityOrFocus);
-    window.addEventListener('visibilitychange', onVisibilityOrFocus);
+    const onAppFocus = () => {
+      checkSessionValidity();
+      if (user?.role === 'admin') {
+        authService.recordHeartbeat();
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        onAppClosed();
+      } else {
+        onAppFocus();
+      }
+    };
+
+    window.addEventListener('beforeunload', onAppClosed);
+    window.addEventListener('pagehide', onAppClosed);
+    window.addEventListener('focus', onAppFocus);
+    window.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', onVisibilityOrFocus);
-      window.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      clearInterval(heartbeatInterval);
+      window.removeEventListener('beforeunload', onAppClosed);
+      window.removeEventListener('pagehide', onAppClosed);
+      window.removeEventListener('focus', onAppFocus);
+      window.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [user]);
 

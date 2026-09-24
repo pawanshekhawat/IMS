@@ -173,5 +173,6 @@ export interface UserSession {
   role: UserRole;
   loginTime: string;
   expiresAt?: number;
+  lastActiveTime?: number;
   timeoutMinutes?: number;
 }

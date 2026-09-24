@@ -6,7 +6,6 @@ import {
   AlertCircle, 
   ArrowUpCircle, 
   Sparkles, 
-  ShieldCheck, 
   Laptop,
   CheckCircle2
 } from 'lucide-react';
@@ -341,54 +340,6 @@ export const AppUpdates: React.FC = () => {
                 <span>{updateError}</span>
               </div>
             )}
-          </div>
-        </Card>
-
-        {/* 2. PC Deployment & Architecture Info */}
-        <Card
-          title="🛡️ Showroom Multi-PC System Info"
-          subtitle="How updates work across billing counter PCs and admin devices"
-        >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div style={{
-              padding: '16px 18px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-neutral-200)',
-              border: '1px solid var(--color-neutral-300)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <ShieldCheck size={16} color="var(--color-primary-600)" />
-                <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                  Cryptographically Signed
-                </span>
-              </div>
-              <p style={{ fontSize: '12px', color: 'var(--color-neutral-600)', margin: 0, lineHeight: 1.5 }}>
-                All updates are signed with an Ed25519 digital key to ensure integrity and protect against tampering.
-              </p>
-            </div>
-
-            <div style={{
-              padding: '16px 18px',
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: 'var(--color-neutral-200)',
-              border: '1px solid var(--color-neutral-300)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Laptop size={16} color="var(--color-primary-600)" />
-                <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--color-neutral-900)' }}>
-                  Independent PC Installation
-                </span>
-              </div>
-              <p style={{ fontSize: '12px', color: 'var(--color-neutral-600)', margin: 0, lineHeight: 1.5 }}>
-                Each computer (Billing Staff PC or Owner Laptop) maintains its own binary while sharing synchronized store data.
-              </p>
-            </div>
           </div>
         </Card>
       </div>

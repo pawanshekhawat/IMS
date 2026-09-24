@@ -35,21 +35,37 @@ class AuthService {
       // ignore
     }
 
-    // If there is an active admin session, adjust its expiration
     const active = this.getActiveSession();
     if (active && active.role === 'admin') {
       active.timeoutMinutes = validMins;
-      active.expiresAt = Date.now() + validMins * 60 * 1000;
       this.persistSession(active);
     }
   }
 
-  public extendAdminSession(extraMinutes?: number): UserSession | null {
+  public recordHeartbeat(): void {
+    const now = Date.now();
+    try {
+      localStorage.setItem('gl_ims_admin_last_active', String(now));
+      localStorage.removeItem('gl_ims_admin_closed_at');
+    } catch {
+      // ignore
+    }
+  }
+
+  public recordAppClosed(): void {
+    const now = Date.now();
+    try {
+      localStorage.setItem('gl_ims_admin_closed_at', String(now));
+      localStorage.setItem('gl_ims_admin_last_active', String(now));
+    } catch {
+      // ignore
+    }
+  }
+
+  public extendAdminSession(_extraMinutes?: number): UserSession | null {
     const active = this.getActiveSession();
     if (active && active.role === 'admin') {
-      const mins = extraMinutes || active.timeoutMinutes || this.getAdminTimeoutMinutes();
-      active.expiresAt = Date.now() + mins * 60 * 1000;
-      this.persistSession(active);
+      this.recordHeartbeat();
       return active;
     }
     return null;
@@ -173,7 +189,6 @@ class AuthService {
 
       // Determine timeout for admin session
       const timeoutMinutes = data.role === 'admin' ? this.getAdminTimeoutMinutes() : undefined;
-      const expiresAt = timeoutMinutes ? Date.now() + timeoutMinutes * 60 * 1000 : undefined;
 
       const session: UserSession = {
         id: data.id,
@@ -181,9 +196,13 @@ class AuthService {
         displayName: data.display_name || (data.role === 'admin' ? 'Owner' : 'Showroom Billing Staff'),
         role: data.role as 'admin' | 'staff',
         loginTime: new Date().toISOString(),
+        lastActiveTime: Date.now(),
         timeoutMinutes,
-        expiresAt,
       };
+
+      if (data.role === 'admin') {
+        this.recordHeartbeat();
+      }
 
       this.persistSession(session);
       return { success: true, session };
@@ -217,17 +236,28 @@ class AuthService {
   }
 
   public getActiveSession(): UserSession | null {
-    // 1. Check if admin session is active in localStorage (with 1-hour expiration check)
+    // 1. Check if admin session is active in localStorage
     try {
       const adminData = localStorage.getItem(ADMIN_SESSION_KEY) || sessionStorage.getItem(ADMIN_SESSION_KEY);
       if (adminData) {
         const session = JSON.parse(adminData) as UserSession;
-        // Check if admin session has timed out (default 1 hr or custom timer)
-        if (session.expiresAt && Date.now() > session.expiresAt) {
-          console.warn('Admin session has expired (auto-logout timer elapsed).');
-          localStorage.removeItem(ADMIN_SESSION_KEY);
-          sessionStorage.removeItem(ADMIN_SESSION_KEY);
-          return null;
+        if (session.role === 'admin') {
+          const timeoutMins = this.getAdminTimeoutMinutes();
+          const maxInactiveMs = timeoutMins * 60 * 1000;
+          const closedAt = Number(localStorage.getItem('gl_ims_admin_closed_at')) || 0;
+          const lastActive = Number(localStorage.getItem('gl_ims_admin_last_active')) || session.lastActiveTime || 0;
+          const referenceTime = closedAt || lastActive;
+
+          // Check if app was closed or inactive for longer than the timeout
+          if (referenceTime && (Date.now() - referenceTime) > maxInactiveMs) {
+            console.warn(`Admin session expired: app was closed for over ${timeoutMins} minutes.`);
+            this.logout();
+            return null;
+          }
+
+          // User is currently using the app: keep session refreshed
+          this.recordHeartbeat();
+          return session;
         }
         return session;
       }
@@ -257,6 +287,8 @@ class AuthService {
       localStorage.removeItem(ADMIN_SESSION_KEY);
       sessionStorage.removeItem(ADMIN_SESSION_KEY);
       localStorage.removeItem(STAFF_SESSION_KEY);
+      localStorage.removeItem('gl_ims_admin_closed_at');
+      localStorage.removeItem('gl_ims_admin_last_active');
     } catch (e) {
       console.error('Error clearing sessions', e);
     }
