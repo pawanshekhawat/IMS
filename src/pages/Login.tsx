@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +8,7 @@ import { AdminWelcomeScreen } from '../components/auth/AdminWelcomeScreen';
 
 export const Login: React.FC = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { user, role, login } = useAuth();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -17,6 +17,17 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [welcomeAdminName, setWelcomeAdminName] = useState('Himanshu Choudhary');
+
+  // If user is already authenticated, redirect straight to their dashboard
+  useEffect(() => {
+    if (user && !showWelcome) {
+      navigate(role === 'admin' ? '/' : '/sales', { replace: true });
+    }
+  }, [user, role, navigate, showWelcome]);
+
+  const handleWelcomeComplete = useCallback(() => {
+    navigate('/', { replace: true });
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +51,7 @@ export const Login: React.FC = () => {
           }
           setShowWelcome(true);
         } else {
-          navigate('/sales');
+          navigate('/sales', { replace: true });
         }
       } else {
         setError(res.error || 'Authentication failed. Please check your credentials.');
@@ -56,7 +67,7 @@ export const Login: React.FC = () => {
     return (
       <AdminWelcomeScreen
         adminName={welcomeAdminName}
-        onComplete={() => navigate('/')}
+        onComplete={handleWelcomeComplete}
       />
     );
   }

@@ -39,6 +39,23 @@ export const Settings: React.FC = () => {
   const [customTimeoutInput, setCustomTimeoutInput] = useState<string>(String(authService.getAdminTimeoutMinutes()));
   const [timeoutFeedback, setTimeoutFeedback] = useState<string | null>(null);
 
+  const [localRemainingMs, setLocalRemainingMs] = useState<number | null>(() => {
+    return user?.expiresAt ? Math.max(0, user.expiresAt - Date.now()) : null;
+  });
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      if (user?.expiresAt) {
+        setLocalRemainingMs(Math.max(0, user.expiresAt - Date.now()));
+      } else {
+        setLocalRemainingMs(null);
+      }
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [user?.expiresAt]);
+
   const handleSetTimeout = (mins: number) => {
     authService.setAdminTimeoutMinutes(mins);
     setAdminTimeoutMins(mins);
@@ -778,7 +795,7 @@ export const Settings: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Timer size={16} color="var(--color-primary-800)" />
                     <span style={{ fontSize: '12px', color: 'var(--color-neutral-700)' }}>
-                      Session remaining: <strong>{formatRemainingTime(sessionRemainingMs)}</strong>
+                      Session remaining: <strong>{formatRemainingTime(localRemainingMs ?? sessionRemainingMs)}</strong>
                     </span>
                   </div>
                   <Button

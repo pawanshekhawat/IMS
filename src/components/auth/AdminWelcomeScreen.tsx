@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 interface AdminWelcomeScreenProps {
   adminName?: string;
@@ -11,24 +11,33 @@ export const AdminWelcomeScreen: React.FC<AdminWelcomeScreenProps> = ({
 }) => {
   const [animStage, setAnimStage] = useState<'ignite' | 'reveal' | 'radiate' | 'outro'>('ignite');
   const [isFadingOut, setIsFadingOut] = useState(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  const handleFinish = () => {
+    setIsFadingOut(true);
+    setTimeout(() => {
+      onCompleteRef.current();
+    }, 150);
+  };
 
   useEffect(() => {
-    // Stage 1: Initial spark & ignition (0s - 0.7s)
-    const t1 = setTimeout(() => setAnimStage('reveal'), 700);
+    // Stage 1: Initial spark & ignition (0s - 0.4s)
+    const t1 = setTimeout(() => setAnimStage('reveal'), 400);
 
-    // Stage 2: Full logo illumination & typographic reveal (0.7s - 2.2s)
-    const t2 = setTimeout(() => setAnimStage('radiate'), 2200);
+    // Stage 2: Full logo illumination & typographic reveal (0.4s - 1.1s)
+    const t2 = setTimeout(() => setAnimStage('radiate'), 1100);
 
-    // Stage 3: Cinematic light swell & dissolve (4.1s)
+    // Stage 3: Cinematic light swell & dissolve (1.5s)
     const t3 = setTimeout(() => {
       setAnimStage('outro');
       setIsFadingOut(true);
-    }, 4100);
+    }, 1500);
 
-    // Complete transition into Dashboard at 4.6s
+    // Complete transition into Dashboard at 1.8s
     const t4 = setTimeout(() => {
-      onComplete();
-    }, 4600);
+      onCompleteRef.current();
+    }, 1800);
 
     return () => {
       clearTimeout(t1);
@@ -36,13 +45,16 @@ export const AdminWelcomeScreen: React.FC<AdminWelcomeScreenProps> = ({
       clearTimeout(t3);
       clearTimeout(t4);
     };
-  }, [onComplete]);
+  }, []);
 
   return (
     <div
+      onClick={handleFinish}
+      title="Click anywhere to continue to Dashboard"
       style={{
         position: 'fixed',
         inset: 0,
+        cursor: 'pointer',
         zIndex: 99999,
         backgroundColor: '#03140E',
         overflow: 'hidden',
@@ -296,6 +308,23 @@ export const AdminWelcomeScreen: React.FC<AdminWelcomeScreenProps> = ({
           >
             Garhwal Lights • Shivam Heights, Sikar
           </p>
+
+          {/* Entering Dashboard indicator */}
+          <div
+            style={{
+              marginTop: '20px',
+              fontSize: '12px',
+              color: '#A7F3D0',
+              fontWeight: 600,
+              letterSpacing: '0.02em',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              opacity: 0.9,
+            }}
+          >
+            Entering Dashboard... <span style={{ opacity: 0.6, fontSize: '11px', fontWeight: 400 }}>(or click to skip)</span>
+          </div>
         </div>
       </div>
 

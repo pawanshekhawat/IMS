@@ -21,7 +21,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [sessionRemainingMs, setSessionRemainingMs] = useState<number | null>(null);
 
   const checkSessionValidity = () => {
     const active = authService.getActiveSession();
@@ -29,19 +28,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         logout();
       }
-      setSessionRemainingMs(null);
       return;
     }
 
-    if (active.expiresAt) {
-      const remaining = Math.max(0, active.expiresAt - Date.now());
-      setSessionRemainingMs(remaining);
-      if (remaining <= 0) {
-        logout();
-        return;
-      }
-    } else {
-      setSessionRemainingMs(null);
+    if (active.expiresAt && Date.now() > active.expiresAt) {
+      logout();
+      return;
     }
 
     if (!user || user.id !== active.id || user.expiresAt !== active.expiresAt) {
@@ -53,8 +45,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkSessionValidity();
     setIsLoading(false);
 
-    // Heartbeat check every 2 seconds for auto-logout enforcement
-    const interval = setInterval(checkSessionValidity, 2000);
+    // Heartbeat check every 3 seconds for auto-logout enforcement
+    const interval = setInterval(checkSessionValidity, 3000);
 
     const onVisibilityOrFocus = () => {
       checkSessionValidity();
@@ -75,9 +67,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (res.success && res.session) {
       dataService.invalidateCache();
       setUser(res.session);
-      if (res.session.expiresAt) {
-        setSessionRemainingMs(Math.max(0, res.session.expiresAt - Date.now()));
-      }
       return { success: true };
     }
     return { success: false, error: res.error || 'Login failed' };
@@ -87,18 +76,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     dataService.invalidateCache();
     authService.logout();
     setUser(null);
-    setSessionRemainingMs(null);
   };
 
   const extendSession = (minutes?: number) => {
     const updated = authService.extendAdminSession(minutes);
     if (updated) {
       setUser({ ...updated });
-      if (updated.expiresAt) {
-        setSessionRemainingMs(Math.max(0, updated.expiresAt - Date.now()));
-      }
     }
   };
+
+  const sessionRemainingMs = user?.expiresAt ? Math.max(0, user.expiresAt - Date.now()) : null;
 
   const updateDisplayName = async (newName: string): Promise<boolean> => {
     const targetUsername = user?.username || 'admin';
