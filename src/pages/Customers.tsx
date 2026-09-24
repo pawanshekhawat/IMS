@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2, Phone, Mail, MapPin } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Table, type TableColumn } from '../components/ui/Table';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Customer } from '../types';
 import { CustomerCrudModal } from '../crud/CustomerCrudModal';
@@ -12,6 +13,34 @@ export const Customers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
 
+  // Custom confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+    isAlertOnly?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'OK',
+      variant,
+      isAlertOnly: true,
+      onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
+
   const loadData = async () => {
     const list = await dataService.getCustomers();
     setCustomers(list);
@@ -21,16 +50,25 @@ export const Customers: React.FC = () => {
     loadData();
   }, []);
 
-  const handleDelete = async (cust: Customer) => {
-    if (window.confirm(`Are you sure you want to delete customer ${cust.name}?`)) {
-      setCustomers(prev => prev.filter(c => c.id !== cust.id));
-      try {
-        await dataService.deleteCustomer(cust.id);
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete customer.');
-        loadData();
-      }
-    }
+  const handleDelete = (cust: Customer) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Customer',
+      message: `Are you sure you want to delete customer "${cust.name}" (${cust.phone})?\n\nThis will remove their contact info and profile.`,
+      confirmText: 'Yes, Delete',
+      variant: 'danger',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setCustomers(prev => prev.filter(c => c.id !== cust.id));
+        try {
+          await dataService.deleteCustomer(cust.id);
+        } catch (err: any) {
+          showNotice('Delete Failed', err.message || 'Failed to delete customer.', 'danger');
+          loadData();
+        }
+      },
+    });
   };
 
   const filteredCustomers = customers.filter(c => 
@@ -183,6 +221,18 @@ export const Customers: React.FC = () => {
         }}
         onSuccess={loadData}
         customerToEdit={customerToEdit}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        isAlertOnly={confirmDialog.isAlertOnly}
       />
     </>
   );

@@ -57,7 +57,7 @@ export interface SaleItem {
   total: number;
 }
 
-export type PaymentMethod = 'Cash' | 'UPI' | 'Card' | 'Store Credit';
+export type PaymentMethod = 'Cash' | 'UPI' | 'Card' | 'Store Credit' | 'Split (Cash + UPI)';
 export type PaymentStatus = 'Paid' | 'Pending' | 'Partial';
 
 export interface Sale {
@@ -72,6 +72,10 @@ export interface Sale {
   taxAmount: number;
   discountAmount: number;
   grandTotal: number;
+  paidAmount?: number;
+  pendingAmount?: number;
+  cashAmount?: number;
+  upiAmount?: number;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   notes?: string;

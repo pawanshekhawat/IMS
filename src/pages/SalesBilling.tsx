@@ -15,6 +15,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
 import { Table, type TableColumn } from '../components/ui/Table';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Product, Customer, Sale, SaleItem } from '../types';
 import { SaleCheckoutModal } from '../crud/SaleCheckoutModal';
@@ -38,6 +39,34 @@ export const SalesBilling: React.FC = () => {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [saleForPrint, setSaleForPrint] = useState<Sale | null>(null);
 
+  // Custom Confirmation / Alert Popup Dialog State
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+    isAlertOnly?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'OK',
+      variant,
+      isAlertOnly: true,
+      onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
+
   const loadData = async () => {
     const [pList, cList, sList] = await Promise.all([
       dataService.getProducts(),
@@ -55,7 +84,7 @@ export const SalesBilling: React.FC = () => {
 
   const handleAddToCart = (product: Product) => {
     if (product.stockQuantity <= 0) {
-      alert(`Cannot add "${product.name}" - Item is out of stock!`);
+      showNotice('Item Out of Stock', `Cannot add "${product.name}" - Item is currently out of stock!`, 'warning');
       return;
     }
 
@@ -63,7 +92,7 @@ export const SalesBilling: React.FC = () => {
     if (existingIndex > -1) {
       const existing = cart[existingIndex];
       if (existing.quantity >= product.stockQuantity) {
-        alert(`Cannot add more than available stock (${product.stockQuantity} ${product.unit})!`);
+        showNotice('Stock Limit Reached', `Cannot add more than available stock (${product.stockQuantity} ${product.unit})!`, 'warning');
         return;
       }
       const updated = [...cart];
@@ -101,7 +130,7 @@ export const SalesBilling: React.FC = () => {
     }
 
     if (product && newQty > product.stockQuantity) {
-      alert(`Cannot exceed available stock of ${product.stockQuantity}!`);
+      showNotice('Stock Limit Reached', `Cannot exceed available stock of ${product.stockQuantity} ${product.unit}!`, 'warning');
       return;
     }
 
@@ -122,7 +151,7 @@ export const SalesBilling: React.FC = () => {
         handleAddToCart(match);
         setBarcodeScanInput('');
       } else {
-        alert(`No product found with barcode/SKU: ${barcodeScanInput}`);
+        showNotice('Barcode Not Found', `No product found with barcode/SKU: ${barcodeScanInput}`, 'info');
       }
     }
   };
@@ -171,21 +200,52 @@ export const SalesBilling: React.FC = () => {
     },
     {
       header: 'Payment Mode',
-      accessor: (s) => <Badge variant="secondary">{s.paymentMethod}</Badge>,
+      accessor: (s) => (
+        <div>
+          <Badge variant="secondary">{s.paymentMethod}</Badge>
+          {s.paymentMethod === 'Split (Cash + UPI)' && (
+            <div style={{ fontSize: '10px', color: 'var(--color-neutral-600)', marginTop: '2px' }}>
+              Cash: ₹{(s.cashAmount || 0).toLocaleString('en-IN')} | UPI: ₹{(s.upiAmount || 0).toLocaleString('en-IN')}
+            </div>
+          )}
+        </div>
+      ),
       align: 'center',
     },
     {
-      header: 'Grand Total',
-      accessor: (s) => (
-        <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--color-neutral-900)' }}>
-          ₹{s.grandTotal.toLocaleString('en-IN')}
-        </span>
-      ),
+      header: 'Amount / Balance',
+      accessor: (s) => {
+        const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+        const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+        return (
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--color-neutral-900)' }}>
+              ₹{s.grandTotal.toLocaleString('en-IN')}
+            </span>
+            {pending > 0 ? (
+              <div style={{ fontSize: '11px', color: 'var(--color-danger)', fontWeight: 700 }}>
+                Pending: ₹{pending.toLocaleString('en-IN')}
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 600 }}>
+                Paid: ₹{paid.toLocaleString('en-IN')}
+              </div>
+            )}
+          </div>
+        );
+      },
       align: 'right',
     },
     {
       header: 'Status',
-      accessor: () => <Badge variant="success">Paid</Badge>,
+      accessor: (s) => {
+        const st = s.paymentStatus || 'Paid';
+        return (
+          <Badge variant={st === 'Paid' ? 'success' : st === 'Partial' ? 'warning' : 'danger'}>
+            {st === 'Paid' ? 'Paid' : st === 'Partial' ? 'Partial' : 'Pending'}
+          </Badge>
+        );
+      },
       align: 'center',
     },
     {
@@ -217,18 +277,26 @@ export const SalesBilling: React.FC = () => {
     },
   ];
 
-  const handleDeleteSale = async (sale: Sale) => {
-    const confirmMsg = `Are you sure you want to delete invoice #${sale.invoiceNumber} (₹${sale.grandTotal.toLocaleString('en-IN')}) for ${sale.customerName}?\n\nThis will remove the sales invoice & profit records, and restore the sold items back to inventory.`;
-    if (window.confirm(confirmMsg)) {
-      setSalesHistory(prev => prev.filter(s => s.id !== sale.id));
-      try {
-        await dataService.deleteSale(sale.id, true);
-        await loadData();
-      } catch (err: any) {
-        alert(err?.message || 'Failed to delete invoice');
-        await loadData();
-      }
-    }
+  const handleDeleteSale = (sale: Sale) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: `Delete Invoice #${sale.invoiceNumber}`,
+      message: `Are you sure you want to delete invoice #${sale.invoiceNumber} (₹${sale.grandTotal.toLocaleString('en-IN')}) for ${sale.customerName}?\n\nThis will remove the sales invoice & profit records, and restore the sold items back to inventory.`,
+      confirmText: 'Yes, Delete & Restore Stock',
+      variant: 'danger',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setSalesHistory(prev => prev.filter(s => s.id !== sale.id));
+        try {
+          await dataService.deleteSale(sale.id, true);
+          await loadData();
+        } catch (err: any) {
+          showNotice('Deletion Failed', err?.message || 'Failed to delete invoice', 'danger');
+          await loadData();
+        }
+      },
+    });
   };
 
   return (
@@ -654,6 +722,18 @@ export const SalesBilling: React.FC = () => {
         isOpen={!!saleForPrint}
         onClose={() => setSaleForPrint(null)}
         sale={saleForPrint}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        isAlertOnly={confirmDialog.isAlertOnly}
       />
     </>
   );

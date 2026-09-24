@@ -6,3 +6,4 @@ export * from './Modal';
 export * from './Card';
 export * from './StatCard';
 export * from './Table';
+export * from './ConfirmModal';

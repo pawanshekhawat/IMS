@@ -669,13 +669,13 @@ class SupabaseDataServiceImpl implements IDataService {
         })();
 
         if (customer) {
-          const outstanding = sale.paymentStatus === 'Pending' 
-            ? customer.outstandingBalance + sale.grandTotal 
-            : customer.outstandingBalance;
+          const pending = sale.pendingAmount !== undefined 
+            ? sale.pendingAmount 
+            : (sale.paymentStatus === 'Pending' ? sale.grandTotal : 0);
 
           await this.updateCustomer(customer.id, {
             totalPurchases: customer.totalPurchases + sale.grandTotal,
-            outstandingBalance: outstanding,
+            outstandingBalance: customer.outstandingBalance + pending,
           });
         }
       } catch (err) {
@@ -726,10 +726,12 @@ class SupabaseDataServiceImpl implements IDataService {
         })();
 
         if (customer) {
+          const pending = sale.pendingAmount !== undefined
+            ? sale.pendingAmount
+            : (sale.paymentStatus === 'Pending' ? sale.grandTotal : 0);
+
           const newTotalPurchases = Math.max(0, customer.totalPurchases - sale.grandTotal);
-          const newOutstanding = sale.paymentStatus === 'Pending'
-            ? Math.max(0, customer.outstandingBalance - sale.grandTotal)
-            : customer.outstandingBalance;
+          const newOutstanding = Math.max(0, customer.outstandingBalance - pending);
 
           await this.updateCustomer(customer.id, {
             totalPurchases: newTotalPurchases,
@@ -1225,6 +1227,36 @@ class SupabaseDataServiceImpl implements IDataService {
   }
 
   private mapSaleFromDb(row: any): Sale {
+    let cleanNotes = row.notes || '';
+    let paidAmount = Number(row.total_amount || 0);
+    let pendingAmount = 0;
+    let cashAmount: number | undefined;
+    let upiAmount: number | undefined;
+
+    if (row.notes && row.notes.includes('<!--PAYMENT_META:')) {
+      try {
+        const match = row.notes.match(/<!--PAYMENT_META:(.*?)-->/);
+        if (match && match[1]) {
+          const meta = JSON.parse(match[1]);
+          if (meta.paidAmount !== undefined) paidAmount = Number(meta.paidAmount);
+          if (meta.pendingAmount !== undefined) pendingAmount = Number(meta.pendingAmount);
+          if (meta.cashAmount !== undefined) cashAmount = Number(meta.cashAmount);
+          if (meta.upiAmount !== undefined) upiAmount = Number(meta.upiAmount);
+          cleanNotes = row.notes.replace(/<!--PAYMENT_META:.*?-->/, '').trim();
+        }
+      } catch (e) {
+        console.warn('Failed to parse payment metadata from notes', e);
+      }
+    } else {
+      if (row.payment_status === 'Pending') {
+        paidAmount = 0;
+        pendingAmount = Number(row.total_amount || 0);
+      } else {
+        paidAmount = Number(row.total_amount || 0);
+        pendingAmount = 0;
+      }
+    }
+
     return {
       id: row.id,
       invoiceNumber: row.invoice_number,
@@ -1236,14 +1268,30 @@ class SupabaseDataServiceImpl implements IDataService {
       taxAmount: Number(row.tax_amount || 0),
       discountAmount: Number(row.discount || 0),
       grandTotal: Number(row.total_amount || 0),
+      paidAmount,
+      pendingAmount,
+      cashAmount,
+      upiAmount,
       paymentMethod: row.payment_method || 'UPI',
       paymentStatus: row.payment_status || 'Paid',
-      notes: row.notes,
+      notes: cleanNotes,
       createdAt: row.created_at || new Date().toISOString(),
     };
   }
 
   private mapSaleToDb(s: Sale): any {
+    let finalNotes = s.notes || '';
+    const paymentMeta: any = {};
+    if (s.paidAmount !== undefined) paymentMeta.paidAmount = s.paidAmount;
+    if (s.pendingAmount !== undefined) paymentMeta.pendingAmount = s.pendingAmount;
+    if (s.cashAmount !== undefined) paymentMeta.cashAmount = s.cashAmount;
+    if (s.upiAmount !== undefined) paymentMeta.upiAmount = s.upiAmount;
+
+    if (Object.keys(paymentMeta).length > 0) {
+      const metaTag = `<!--PAYMENT_META:${JSON.stringify(paymentMeta)}-->`;
+      finalNotes = finalNotes ? `${finalNotes}\n${metaTag}` : metaTag;
+    }
+
     return {
       id: s.id,
       invoice_number: s.invoiceNumber,
@@ -1256,7 +1304,7 @@ class SupabaseDataServiceImpl implements IDataService {
       payment_method: s.paymentMethod,
       payment_status: s.paymentStatus,
       items: s.items,
-      notes: s.notes,
+      notes: finalNotes,
       cashier_name: 'Counter Staff',
     };
   }

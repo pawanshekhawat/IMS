@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Edit2, Trash2, Phone, Mail } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Table, type TableColumn } from '../components/ui/Table';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Supplier } from '../types';
 import { SupplierCrudModal } from '../crud/SupplierCrudModal';
@@ -12,6 +13,34 @@ export const Suppliers: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [supplierToEdit, setSupplierToEdit] = useState<Supplier | null>(null);
 
+  // Custom confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+    isAlertOnly?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'OK',
+      variant,
+      isAlertOnly: true,
+      onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
+
   const loadData = async () => {
     const list = await dataService.getSuppliers();
     setSuppliers(list);
@@ -21,16 +50,25 @@ export const Suppliers: React.FC = () => {
     loadData();
   }, []);
 
-  const handleDelete = async (s: Supplier) => {
-    if (window.confirm(`Are you sure you want to delete supplier ${s.name}?`)) {
-      setSuppliers(prev => prev.filter(item => item.id !== s.id));
-      try {
-        await dataService.deleteSupplier(s.id);
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete supplier.');
-        loadData();
-      }
-    }
+  const handleDelete = (s: Supplier) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Supplier',
+      message: `Are you sure you want to delete supplier "${s.name}"?\n\nThis will remove them from your active supplier list.`,
+      confirmText: 'Yes, Delete',
+      variant: 'danger',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setSuppliers(prev => prev.filter(item => item.id !== s.id));
+        try {
+          await dataService.deleteSupplier(s.id);
+        } catch (err: any) {
+          showNotice('Delete Failed', err.message || 'Failed to delete supplier.', 'danger');
+          loadData();
+        }
+      },
+    });
   };
 
   const filteredSuppliers = suppliers.filter(s =>
@@ -188,6 +226,18 @@ export const Suppliers: React.FC = () => {
         }}
         onSuccess={loadData}
         supplierToEdit={supplierToEdit}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        isAlertOnly={confirmDialog.isAlertOnly}
       />
     </>
   );

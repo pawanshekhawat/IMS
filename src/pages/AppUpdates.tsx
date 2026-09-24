@@ -13,6 +13,7 @@ import { Header } from '../components/layout/Header';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { updateService, type UpdateInfo } from '../services/updateService';
 
 export const AppUpdates: React.FC = () => {
@@ -22,6 +23,15 @@ export const AppUpdates: React.FC = () => {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState<boolean>(() => {
     return localStorage.getItem('auto_update_enabled') !== 'false';
+  });
+  const [noticeDialog, setNoticeDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
   });
 
   // Automatically check for updates on page mount
@@ -75,7 +85,11 @@ export const AppUpdates: React.FC = () => {
     try {
       await updateService.relaunch();
     } catch (err: any) {
-      alert('Please restart the application manually: ' + (err?.message || ''));
+      setNoticeDialog({
+        isOpen: true,
+        title: 'Restart Required',
+        message: 'Please restart the application manually: ' + (err?.message || ''),
+      });
     }
   };
 
@@ -343,6 +357,16 @@ export const AppUpdates: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      <ConfirmModal
+        isOpen={noticeDialog.isOpen}
+        onClose={() => setNoticeDialog(prev => ({ ...prev, isOpen: false }))}
+        title={noticeDialog.title}
+        message={noticeDialog.message}
+        confirmText="OK"
+        variant="warning"
+        isAlertOnly={true}
+      />
     </>
   );
 };

@@ -19,6 +19,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import { updateService, type UpdateInfo } from '../services/updateService';
@@ -37,6 +38,27 @@ export const Settings: React.FC = () => {
   });
   const [customTimeoutInput, setCustomTimeoutInput] = useState<string>(String(authService.getAdminTimeoutMinutes()));
   const [timeoutFeedback, setTimeoutFeedback] = useState<string | null>(null);
+
+  // Custom alert / confirmation dialog state
+  const [noticeDialog, setNoticeDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setNoticeDialog({
+      isOpen: true,
+      title,
+      message,
+      variant,
+    });
+  };
 
   const handleSetTimeout = (mins: number) => {
     authService.setAdminTimeoutMinutes(mins);
@@ -77,7 +99,7 @@ export const Settings: React.FC = () => {
       }
     } catch (err: any) {
       setNameSaving(false);
-      alert(err?.message || 'Failed to update name in Supabase');
+      showNotice('Update Failed', err?.message || 'Failed to update name in Supabase', 'danger');
     }
   };
 
@@ -241,7 +263,7 @@ export const Settings: React.FC = () => {
     try {
       await updateService.relaunch();
     } catch (err: any) {
-      alert('Please restart the application manually: ' + (err?.message || ''));
+      showNotice('Restart Notice', 'Please restart the application manually: ' + (err?.message || ''), 'warning');
     }
   };
 
@@ -969,6 +991,16 @@ export const Settings: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      <ConfirmModal
+        isOpen={noticeDialog.isOpen}
+        onClose={() => setNoticeDialog(prev => ({ ...prev, isOpen: false }))}
+        title={noticeDialog.title}
+        message={noticeDialog.message}
+        confirmText="OK"
+        variant={noticeDialog.variant || 'warning'}
+        isAlertOnly={true}
+      />
     </>
   );
 };

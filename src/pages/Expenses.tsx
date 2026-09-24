@@ -4,6 +4,7 @@ import { Header } from '../components/layout/Header';
 import { Badge } from '../components/ui/Badge';
 import { StatCard } from '../components/ui/StatCard';
 import { Table, type TableColumn } from '../components/ui/Table';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Expense } from '../types';
 import { ExpenseCrudModal } from '../crud/ExpenseCrudModal';
@@ -12,6 +13,34 @@ export const Expenses: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Custom confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+    isAlertOnly?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'OK',
+      variant,
+      isAlertOnly: true,
+      onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
 
   const loadData = async () => {
     const list = await dataService.getExpenses();
@@ -22,16 +51,25 @@ export const Expenses: React.FC = () => {
     loadData();
   }, []);
 
-  const handleDelete = async (exp: Expense) => {
-    if (window.confirm(`Delete expense "${exp.title}" of ₹${exp.amount}?`)) {
-      setExpenses(prev => prev.filter(e => e.id !== exp.id));
-      try {
-        await dataService.deleteExpense(exp.id);
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete expense.');
-        loadData();
-      }
-    }
+  const handleDelete = (exp: Expense) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Delete Expense',
+      message: `Are you sure you want to delete expense "${exp.title}" of ₹${exp.amount.toLocaleString('en-IN')}?\n\nThis will remove it from expense registers and profit calculations.`,
+      confirmText: 'Yes, Delete',
+      variant: 'danger',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setExpenses(prev => prev.filter(e => e.id !== exp.id));
+        try {
+          await dataService.deleteExpense(exp.id);
+        } catch (err: any) {
+          showNotice('Delete Failed', err.message || 'Failed to delete expense.', 'danger');
+          loadData();
+        }
+      },
+    });
   };
 
   const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
@@ -200,6 +238,18 @@ export const Expenses: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={loadData}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        isAlertOnly={confirmDialog.isAlertOnly}
       />
     </>
   );

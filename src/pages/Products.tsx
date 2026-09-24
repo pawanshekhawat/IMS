@@ -4,6 +4,7 @@ import { Header } from '../components/layout/Header';
 import { Badge } from '../components/ui/Badge';
 import { Select } from '../components/ui/Select';
 import { Table, type TableColumn } from '../components/ui/Table';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Product, Supplier } from '../types';
 import { ProductCrudModal } from '../crud/ProductCrudModal';
@@ -23,6 +24,34 @@ export const Products: React.FC = () => {
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [productToAdjust, setProductToAdjust] = useState<Product | null>(null);
 
+  // Custom confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+    isAlertOnly?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'OK',
+      variant,
+      isAlertOnly: true,
+      onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
+
   const loadData = async () => {
     const [pList, sList] = await Promise.all([
       dataService.getProducts(),
@@ -36,16 +65,25 @@ export const Products: React.FC = () => {
     loadData();
   }, []);
 
-  const handleDeleteProduct = async (prod: Product) => {
-    if (window.confirm(`Are you sure you want to delete ${prod.name}?`)) {
-      setProducts(prev => prev.filter(p => p.id !== prod.id));
-      try {
-        await dataService.deleteProduct(prod.id);
-      } catch (err: any) {
-        alert(err.message || 'Failed to delete product.');
-        loadData();
-      }
-    }
+  const handleDeleteProduct = (prod: Product) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: `Delete Product`,
+      message: `Are you sure you want to delete "${prod.name}" (SKU: ${prod.sku})?\n\nThis will remove the item from active catalog and inventory tracking.`,
+      confirmText: 'Yes, Delete',
+      variant: 'danger',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setProducts(prev => prev.filter(p => p.id !== prod.id));
+        try {
+          await dataService.deleteProduct(prod.id);
+        } catch (err: any) {
+          showNotice('Delete Failed', err.message || 'Failed to delete product.', 'danger');
+          loadData();
+        }
+      },
+    });
   };
 
   const categories = ['ALL', ...Array.from(new Set(products.map(p => p.category)))];
@@ -339,6 +377,18 @@ export const Products: React.FC = () => {
         onClose={() => setProductToAdjust(null)}
         onSuccess={loadData}
         product={productToAdjust}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        isAlertOnly={confirmDialog.isAlertOnly}
       />
     </>
   );

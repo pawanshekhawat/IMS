@@ -240,8 +240,18 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                 <p style={{ fontSize: '12px', fontWeight: 600, color: '#111827', margin: '2px 0 0 0' }}>
                   Mode: <strong style={{ color: '#064D3D' }}>{sale.paymentMethod}</strong>
                 </p>
-                <p style={{ fontSize: '12px', fontWeight: 600, color: '#16A34A', margin: '2px 0 0 0' }}>
-                  Status: <strong>{sale.paymentStatus}</strong>
+                {sale.paymentMethod === 'Split (Cash + UPI)' && (
+                  <p style={{ fontSize: '11px', color: '#4B5563', margin: '1px 0 0 0' }}>
+                    Cash: <strong>₹{formatCurrency(sale.cashAmount || 0)}</strong> • UPI: <strong>₹{formatCurrency(sale.upiAmount || 0)}</strong>
+                  </p>
+                )}
+                <p style={{
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: sale.paymentStatus === 'Paid' ? '#16A34A' : sale.paymentStatus === 'Partial' ? '#D97706' : '#DC2626',
+                  margin: '2px 0 0 0',
+                }}>
+                  Status: <strong>{sale.paymentStatus === 'Paid' ? 'Paid (Full)' : sale.paymentStatus === 'Partial' ? 'Partial Payment' : 'Pending Payment'}</strong>
                 </p>
               </div>
             </div>
@@ -274,7 +284,7 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
             {/* Calculations & Summary */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <div style={{ width: '280px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ width: '290px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4B5563' }}>
                   <span>Subtotal:</span>
                   <span>₹{formatCurrency(sale.subtotal)}</span>
@@ -304,6 +314,36 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                   <span>Grand Total:</span>
                   <span>₹{formatCurrency(sale.grandTotal)}</span>
                 </div>
+
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: '#16A34A',
+                  marginTop: '2px',
+                }}>
+                  <span>Amount Paid:</span>
+                  <span>₹{formatCurrency(sale.paidAmount !== undefined ? sale.paidAmount : (sale.paymentStatus === 'Pending' ? 0 : sale.grandTotal))}</span>
+                </div>
+
+                {(sale.pendingAmount !== undefined ? sale.pendingAmount > 0 : (sale.grandTotal - (sale.paidAmount || 0) > 0 && sale.paymentStatus !== 'Paid')) && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '14px',
+                    fontWeight: 800,
+                    color: '#DC2626',
+                    backgroundColor: '#FEF2F2',
+                    padding: '6px 10px',
+                    borderRadius: '4px',
+                    border: '1px solid #FCA5A5',
+                    marginTop: '4px',
+                  }}>
+                    <span>Pending Balance:</span>
+                    <span>₹{formatCurrency(sale.pendingAmount !== undefined ? sale.pendingAmount : Math.max(0, sale.grandTotal - (sale.paidAmount || 0)))}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -376,7 +416,25 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
               }}>
                 TOTAL: ₹{formatCurrency(sale.grandTotal)}
               </div>
-              <div style={{ fontSize: '11px', color: '#4B5563' }}>Paid via: <strong>{sale.paymentMethod}</strong></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 700, color: '#16A34A', marginTop: '2px' }}>
+                <span>Paid:</span>
+                <span>₹{formatCurrency(sale.paidAmount !== undefined ? sale.paidAmount : (sale.paymentStatus === 'Pending' ? 0 : sale.grandTotal))}</span>
+              </div>
+              {(sale.pendingAmount !== undefined ? sale.pendingAmount > 0 : (sale.grandTotal - (sale.paidAmount || 0) > 0 && sale.paymentStatus !== 'Paid')) && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 900, color: '#DC2626', borderTop: '1px dashed #DC2626', paddingTop: '3px' }}>
+                  <span>PENDING BAL:</span>
+                  <span>₹{formatCurrency(sale.pendingAmount !== undefined ? sale.pendingAmount : Math.max(0, sale.grandTotal - (sale.paidAmount || 0)))}</span>
+                </div>
+              )}
+              <div style={{ fontSize: '11px', color: '#4B5563', marginTop: '3px' }}>
+                Paid via: <strong>{sale.paymentMethod}</strong>
+                {sale.paymentMethod === 'Split (Cash + UPI)' && (
+                  <div>(Cash: ₹{formatCurrency(sale.cashAmount || 0)} | UPI: ₹{formatCurrency(sale.upiAmount || 0)})</div>
+                )}
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: sale.paymentStatus === 'Paid' ? '#16A34A' : sale.paymentStatus === 'Partial' ? '#D97706' : '#DC2626' }}>
+                Status: {sale.paymentStatus}
+              </div>
             </div>
 
             <div style={{ textAlign: 'center', marginTop: '18px', fontSize: '11px', borderTop: '1px dashed #D1D5DB', paddingTop: '10px' }}>

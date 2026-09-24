@@ -4,6 +4,7 @@ import { Header } from '../components/layout/Header';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Table, type TableColumn } from '../components/ui/Table';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Purchase, Supplier, Product } from '../types';
 import { PurchaseCrudModal } from '../crud/PurchaseCrudModal';
@@ -16,6 +17,34 @@ export const Purchases: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
+
+  // Custom confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: React.ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'primary' | 'info';
+    isAlertOnly?: boolean;
+    onConfirm?: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showNotice = (title: string, message: string, variant: 'warning' | 'danger' | 'info' = 'warning') => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'OK',
+      variant,
+      isAlertOnly: true,
+      onConfirm: () => setConfirmDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
 
   const loadData = async () => {
     const [pList, sList, prList] = await Promise.all([
@@ -32,33 +61,51 @@ export const Purchases: React.FC = () => {
     loadData();
   }, []);
 
-  const handleReceiveStock = async (po: Purchase) => {
-    if (window.confirm(`Receive stock for ${po.poNumber}? This will automatically add items to your live inventory.`)) {
-      setReceivingId(po.id);
-      try {
-        await dataService.receivePurchase(po.id);
-        await loadData();
-      } catch (err: any) {
-        alert(err.message || 'Failed to receive stock');
-      } finally {
-        setReceivingId(null);
-      }
-    }
+  const handleReceiveStock = (po: Purchase) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Receive Purchase Stock',
+      message: `Receive incoming stock for PO ${po.poNumber}?\n\nThis will automatically add the ordered fixture quantities to your live showroom inventory.`,
+      confirmText: 'Receive & Inward Stock',
+      variant: 'primary',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setReceivingId(po.id);
+        try {
+          await dataService.receivePurchase(po.id);
+          await loadData();
+        } catch (err: any) {
+          showNotice('Stock Receive Failed', err.message || 'Failed to receive stock', 'danger');
+        } finally {
+          setReceivingId(null);
+        }
+      },
+    });
   };
 
-  const handleUpdatePayment = async (po: Purchase, status: 'Paid' | 'Pending') => {
+  const handleUpdatePayment = (po: Purchase, status: 'Paid' | 'Pending') => {
     const actionLabel = status === 'Paid' ? 'mark as Paid' : 'revert to Pending';
-    if (window.confirm(`Are you sure you want to ${actionLabel} payment of ₹${po.totalAmount.toLocaleString('en-IN')} for ${po.poNumber} (${po.supplierName})?`)) {
-      setPayingId(po.id);
-      try {
-        await dataService.updatePurchasePaymentStatus(po.id, status);
-        await loadData();
-      } catch (err: any) {
-        alert(err.message || 'Failed to update payment status');
-      } finally {
-        setPayingId(null);
-      }
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: `Update Payment Status (${status})`,
+      message: `Are you sure you want to ${actionLabel} payment of ₹${po.totalAmount.toLocaleString('en-IN')} for ${po.poNumber} (${po.supplierName})?`,
+      confirmText: status === 'Paid' ? 'Confirm Paid' : 'Set to Pending',
+      variant: status === 'Paid' ? 'primary' : 'warning',
+      isAlertOnly: false,
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        setPayingId(po.id);
+        try {
+          await dataService.updatePurchasePaymentStatus(po.id, status);
+          await loadData();
+        } catch (err: any) {
+          showNotice('Payment Update Failed', err.message || 'Failed to update payment status', 'danger');
+        } finally {
+          setPayingId(null);
+        }
+      },
+    });
   };
 
   const filteredPurchases = purchases.filter(p =>
@@ -251,6 +298,18 @@ export const Purchases: React.FC = () => {
         onSuccess={loadData}
         suppliers={suppliers}
         products={products}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        variant={confirmDialog.variant}
+        isAlertOnly={confirmDialog.isAlertOnly}
       />
     </>
   );
