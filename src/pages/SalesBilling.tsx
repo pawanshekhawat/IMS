@@ -20,6 +20,7 @@ import { dataService } from '../services/dataService';
 import type { Product, Customer, Sale, SaleItem } from '../types';
 import { SaleCheckoutModal } from '../crud/SaleCheckoutModal';
 import { InvoicePrintModal } from '../crud/InvoicePrintModal';
+import { DeleteRecordModal } from '../crud/DeleteRecordModal';
 import { useAuth } from '../context/AuthContext';
 
 export const SalesBilling: React.FC = () => {
@@ -38,6 +39,10 @@ export const SalesBilling: React.FC = () => {
   // Modals
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [saleForPrint, setSaleForPrint] = useState<Sale | null>(null);
+
+  // Invoice Deletion & History Clear State
+  const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
+  const [batchClearSalesOpen, setBatchClearSalesOpen] = useState<boolean>(false);
 
   // Custom Confirmation / Alert Popup Dialog State
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -278,25 +283,7 @@ export const SalesBilling: React.FC = () => {
   ];
 
   const handleDeleteSale = (sale: Sale) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: `Delete Invoice #${sale.invoiceNumber}`,
-      message: `Are you sure you want to delete invoice #${sale.invoiceNumber} (₹${sale.grandTotal.toLocaleString('en-IN')}) for ${sale.customerName}?\n\nThis will remove the sales invoice & profit records, and restore the sold items back to inventory.`,
-      confirmText: 'Yes, Delete & Restore Stock',
-      variant: 'danger',
-      isAlertOnly: false,
-      onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-        setSalesHistory(prev => prev.filter(s => s.id !== sale.id));
-        try {
-          await dataService.deleteSale(sale.id, true);
-          await loadData();
-        } catch (err: any) {
-          showNotice('Deletion Failed', err?.message || 'Failed to delete invoice', 'danger');
-          await loadData();
-        }
-      },
-    });
+    setSaleToDelete(sale);
   };
 
   return (
@@ -695,7 +682,21 @@ export const SalesBilling: React.FC = () => {
         </div>
       ) : (
         /* Sales Invoices History View */
-        <div style={{ padding: '24px 28px' }}>
+        <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {isAdmin && salesHistory.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+              <Button
+                variant="outlined"
+                size="sm"
+                icon={<Trash2 size={13} color="#DC2626" />}
+                onClick={() => setBatchClearSalesOpen(true)}
+                style={{ borderColor: 'rgba(239, 68, 68, 0.4)', color: '#DC2626', fontWeight: 700 }}
+              >
+                Clear Complete Sales History ({salesHistory.length} Invoices)
+              </Button>
+            </div>
+          )}
+
           <Table
             columns={historyColumns}
             data={salesHistory}
@@ -723,6 +724,40 @@ export const SalesBilling: React.FC = () => {
         onClose={() => setSaleForPrint(null)}
         sale={saleForPrint}
       />
+
+      {/* Delete Single Invoice with Stock Choice */}
+      {saleToDelete && (
+        <DeleteRecordModal
+          isOpen={!!saleToDelete}
+          onClose={() => setSaleToDelete(null)}
+          title={`Delete Invoice #${saleToDelete.invoiceNumber}`}
+          subtitle={`Client: ${saleToDelete.customerName} • Total: ₹${saleToDelete.grandTotal.toLocaleString('en-IN')}`}
+          recordType="sale"
+          onConfirm={async (adjustStock) => {
+            const id = saleToDelete.id;
+            setSalesHistory(prev => prev.filter(s => s.id !== id));
+            await dataService.deleteSale(id, adjustStock);
+            await loadData();
+          }}
+        />
+      )}
+
+      {/* Batch Clear All Invoices with Stock Choice */}
+      {batchClearSalesOpen && (
+        <DeleteRecordModal
+          isOpen={batchClearSalesOpen}
+          onClose={() => setBatchClearSalesOpen(false)}
+          title="Clear Complete Sales History"
+          subtitle={`This will delete all ${salesHistory.length} completed invoice records from cloud database`}
+          recordType="sale"
+          isBatch={true}
+          onConfirm={async (adjustStock) => {
+            setSalesHistory([]);
+            await dataService.clearAllSales(adjustStock);
+            await loadData();
+          }}
+        />
+      )}
 
       <ConfirmModal
         isOpen={confirmDialog.isOpen}

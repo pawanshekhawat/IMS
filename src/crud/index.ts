@@ -6,3 +6,4 @@ export * from './ExpenseCrudModal';
 export * from './StockAdjustmentModal';
 export * from './SaleCheckoutModal';
 export * from './InvoicePrintModal';
+export * from './DeleteRecordModal';

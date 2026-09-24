@@ -46,12 +46,15 @@ export interface IDataService {
   getSaleById(id: string): Promise<Sale | undefined>;
   createSale(saleData: Omit<Sale, 'id' | 'createdAt' | 'invoiceNumber'>): Promise<Sale>;
   deleteSale(id: string, restoreInventory?: boolean): Promise<void>;
+  clearAllSales(restoreInventory?: boolean): Promise<number>;
 
   // Purchases
   getPurchases(forceRefresh?: boolean): Promise<Purchase[]>;
   createPurchase(purchaseData: Omit<Purchase, 'id' | 'createdAt' | 'poNumber' | 'status'>): Promise<Purchase>;
   receivePurchase(id: string): Promise<Purchase>;
   updatePurchasePaymentStatus(id: string, paymentStatus: 'Paid' | 'Pending' | 'Partial'): Promise<Purchase>;
+  deletePurchase(id: string, deductStock?: boolean): Promise<void>;
+  clearAllPurchases(deductStock?: boolean): Promise<number>;
 
   // Expenses
   getExpenses(forceRefresh?: boolean): Promise<Expense[]>;
@@ -759,6 +762,18 @@ class SupabaseDataServiceImpl implements IDataService {
     }
   }
 
+  async clearAllSales(restoreInventory: boolean = false): Promise<number> {
+    this.ensureAdminRole('clear all sales history');
+    const sales = await this.getSales(true);
+    const count = sales.length;
+    if (count === 0) return 0;
+
+    for (const sale of sales) {
+      await this.deleteSale(sale.id, restoreInventory);
+    }
+    return count;
+  }
+
   // ==========================================
   // PURCHASES (INWARD STOCK - Admin Only + In-Memory Cache)
   // ==========================================
@@ -920,6 +935,62 @@ class SupabaseDataServiceImpl implements IDataService {
     }
 
     return updated;
+  }
+
+  async deletePurchase(id: string, deductStock: boolean = false): Promise<void> {
+    this.ensureAdminRole('delete purchase orders');
+    rateLimiter.enforceLimit('delete_purchase_limit', 15, 30 * 1000, 'delete purchase orders');
+
+    const po = this.cache.purchases?.find(p => p.id === id) || await (async () => {
+      const supabase = getRequiredSupabase();
+      const { data: row } = await supabase.from('purchases').select('*').eq('id', id).maybeSingle();
+      return row ? this.mapPurchaseFromDb(row) : null;
+    })();
+
+    if (!po) {
+      throw new Error(`Purchase order with ID ${id} not found.`);
+    }
+
+    // If PO was received and deductStock is true, remove the inwarded items from stock
+    if (deductStock && po.status === 'Received' && po.items && po.items.length > 0) {
+      for (const item of po.items) {
+        try {
+          await this.adjustStock(
+            item.productId,
+            -item.quantity,
+            'OUT',
+            `Reverted from deleted Purchase Order #${po.poNumber}`
+          );
+        } catch (stockErr) {
+          console.warn(`Could not adjust stock for item ${item.productId}:`, stockErr);
+        }
+      }
+    }
+
+    const prevPurchases = this.cache.purchases;
+    if (this.cache.purchases) {
+      this.cache.purchases = this.cache.purchases.filter(p => p.id !== id);
+    }
+
+    const supabase = getRequiredSupabase();
+    const { error } = await supabase.from('purchases').delete().eq('id', id);
+    if (error) {
+      this.cache.purchases = prevPurchases;
+      console.error('Supabase deletePurchase error:', error);
+      throw new Error(`Failed to delete purchase order from cloud database: ${error.message}`);
+    }
+  }
+
+  async clearAllPurchases(deductStock: boolean = false): Promise<number> {
+    this.ensureAdminRole('clear all purchase orders');
+    const pos = await this.getPurchases(true);
+    const count = pos.length;
+    if (count === 0) return 0;
+
+    for (const po of pos) {
+      await this.deletePurchase(po.id, deductStock);
+    }
+    return count;
   }
 
   // ==========================================

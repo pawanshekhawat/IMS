@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, PackageCheck, CreditCard } from 'lucide-react';
+import { CheckCircle, PackageCheck, CreditCard, Trash2 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Table, type TableColumn } from '../components/ui/Table';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { DeleteRecordModal } from '../crud/DeleteRecordModal';
 import { dataService } from '../services/dataService';
 import type { Purchase, Supplier, Product } from '../types';
 import { PurchaseCrudModal } from '../crud/PurchaseCrudModal';
+import { useAuth } from '../context/AuthContext';
 
 export const Purchases: React.FC = () => {
+  const { isAdmin } = useAuth();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -17,6 +20,10 @@ export const Purchases: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [receivingId, setReceivingId] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<string | null>(null);
+
+  // Deletion & History Clear State
+  const [poToDelete, setPoToDelete] = useState<Purchase | null>(null);
+  const [batchClearPoOpen, setBatchClearPoOpen] = useState<boolean>(false);
 
   // Custom confirmation modal state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -267,6 +274,19 @@ export const Purchases: React.FC = () => {
               <CheckCircle size={15} /> Settled
             </span>
           )}
+
+          {isAdmin && (
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 size={13} />}
+              onClick={() => setPoToDelete(p)}
+              title="Delete Purchase Order"
+              style={{ marginLeft: '6px' }}
+            >
+              Delete
+            </Button>
+          )}
         </div>
       ),
       align: 'right',
@@ -283,7 +303,21 @@ export const Purchases: React.FC = () => {
         onSearch={setSearchQuery}
       />
 
-      <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {isAdmin && purchases.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <Button
+              variant="outlined"
+              size="sm"
+              icon={<Trash2 size={13} color="#DC2626" />}
+              onClick={() => setBatchClearPoOpen(true)}
+              style={{ borderColor: 'rgba(239, 68, 68, 0.4)', color: '#DC2626', fontWeight: 700 }}
+            >
+              Clear Complete Purchase History ({purchases.length} Orders)
+            </Button>
+          </div>
+        )}
+
         <Table
           columns={columns}
           data={filteredPurchases}
@@ -299,6 +333,40 @@ export const Purchases: React.FC = () => {
         suppliers={suppliers}
         products={products}
       />
+
+      {/* Delete Single PO with Stock Choice */}
+      {poToDelete && (
+        <DeleteRecordModal
+          isOpen={!!poToDelete}
+          onClose={() => setPoToDelete(null)}
+          title={`Delete PO #${poToDelete.poNumber}`}
+          subtitle={`Supplier: ${poToDelete.supplierName} • Total Value: ₹${poToDelete.totalAmount.toLocaleString('en-IN')}`}
+          recordType="purchase"
+          onConfirm={async (adjustStock) => {
+            const id = poToDelete.id;
+            setPurchases(prev => prev.filter(p => p.id !== id));
+            await dataService.deletePurchase(id, adjustStock);
+            await loadData();
+          }}
+        />
+      )}
+
+      {/* Batch Clear All POs with Stock Choice */}
+      {batchClearPoOpen && (
+        <DeleteRecordModal
+          isOpen={batchClearPoOpen}
+          onClose={() => setBatchClearPoOpen(false)}
+          title="Clear Complete Purchase History"
+          subtitle={`This will delete all ${purchases.length} purchase orders from cloud database`}
+          recordType="purchase"
+          isBatch={true}
+          onConfirm={async (adjustStock) => {
+            setPurchases([]);
+            await dataService.clearAllPurchases(adjustStock);
+            await loadData();
+          }}
+        />
+      )}
 
       <ConfirmModal
         isOpen={confirmDialog.isOpen}
