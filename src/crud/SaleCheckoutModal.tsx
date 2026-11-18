@@ -46,9 +46,9 @@ export const SaleCheckoutModal: React.FC<SaleCheckoutModalProps> = ({
   let grandTotal = 0;
 
   if (taxMode === 'included') {
-    // GST is calculated inside actual product price: Net Base = subtotal - discountAmount
+    // GST is calculated directly from 100: Net Base = subtotal - discountAmount
     const netBase = Math.max(0, subtotal - discountAmount);
-    taxAmount = Math.round(((netBase * 18 / 118) + Number.EPSILON) * 100) / 100;
+    taxAmount = Math.round(((netBase * 18 / 100) + Number.EPSILON) * 100) / 100;
     grandTotal = netBase;
   } else {
     // +18% GST added on top of subtotal
