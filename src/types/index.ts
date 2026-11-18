@@ -66,10 +66,13 @@ export interface Sale {
   customerId?: string;
   customerName: string;
   customerPhone?: string;
+  customerAddress?: string;
+  customerGstin?: string;
   items: SaleItem[];
   subtotal: number;
   taxRate: number; // percentage, e.g. 18 for GST
   taxAmount: number;
+  taxMode?: 'included' | 'added';
   discountAmount: number;
   grandTotal: number;
   paidAmount?: number;

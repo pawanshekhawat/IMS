@@ -632,6 +632,16 @@ class SupabaseDataServiceImpl implements IDataService {
       createdAt: now,
     };
 
+    // Auto-fill customer details from cache if customer is from our list
+    if (sale.customerId) {
+      const cust = this.cache.customers?.find(c => c.id === sale.customerId);
+      if (cust) {
+        if (!sale.customerAddress && cust.address) sale.customerAddress = cust.address;
+        if (!sale.customerGstin && cust.gstin) sale.customerGstin = cust.gstin;
+        if (!sale.customerPhone && cust.phone) sale.customerPhone = cust.phone;
+      }
+    }
+
     const supabase = getRequiredSupabase();
 
     // 1. Deduct Stock for sold items in Supabase & in-memory cache
@@ -1303,6 +1313,10 @@ class SupabaseDataServiceImpl implements IDataService {
     let pendingAmount = 0;
     let cashAmount: number | undefined;
     let upiAmount: number | undefined;
+    let customerAddress: string | undefined;
+    let customerGstin: string | undefined;
+    let taxMode: 'included' | 'added' | undefined;
+    let taxRate = 18;
 
     if (row.notes && row.notes.includes('<!--PAYMENT_META:')) {
       try {
@@ -1313,6 +1327,10 @@ class SupabaseDataServiceImpl implements IDataService {
           if (meta.pendingAmount !== undefined) pendingAmount = Number(meta.pendingAmount);
           if (meta.cashAmount !== undefined) cashAmount = Number(meta.cashAmount);
           if (meta.upiAmount !== undefined) upiAmount = Number(meta.upiAmount);
+          if (meta.customerAddress) customerAddress = meta.customerAddress;
+          if (meta.customerGstin) customerGstin = meta.customerGstin;
+          if (meta.taxMode) taxMode = meta.taxMode;
+          if (meta.taxRate !== undefined) taxRate = Number(meta.taxRate);
           cleanNotes = row.notes.replace(/<!--PAYMENT_META:.*?-->/, '').trim();
         }
       } catch (e) {
@@ -1328,17 +1346,34 @@ class SupabaseDataServiceImpl implements IDataService {
       }
     }
 
+    const subtotal = Number(row.subtotal || 0);
+    const discountAmount = Number(row.discount || 0);
+    const grandTotal = Number(row.total_amount || 0);
+    const taxAmount = Number(row.tax_amount || 0);
+
+    // If taxMode wasn't stored, deduce it: if grandTotal equals subtotal - discount, tax was included
+    if (!taxMode && taxAmount > 0) {
+      if (Math.abs(grandTotal - (subtotal - discountAmount)) < 0.05) {
+        taxMode = 'included';
+      } else {
+        taxMode = 'added';
+      }
+    }
+
     return {
       id: row.id,
       invoiceNumber: row.invoice_number,
       customerId: row.customer_id,
       customerName: row.customer_name,
+      customerAddress,
+      customerGstin,
       items: Array.isArray(row.items) ? row.items : [],
-      subtotal: Number(row.subtotal || 0),
-      taxRate: 18,
-      taxAmount: Number(row.tax_amount || 0),
-      discountAmount: Number(row.discount || 0),
-      grandTotal: Number(row.total_amount || 0),
+      subtotal,
+      taxRate,
+      taxAmount,
+      taxMode,
+      discountAmount,
+      grandTotal,
       paidAmount,
       pendingAmount,
       cashAmount,
@@ -1357,6 +1392,10 @@ class SupabaseDataServiceImpl implements IDataService {
     if (s.pendingAmount !== undefined) paymentMeta.pendingAmount = s.pendingAmount;
     if (s.cashAmount !== undefined) paymentMeta.cashAmount = s.cashAmount;
     if (s.upiAmount !== undefined) paymentMeta.upiAmount = s.upiAmount;
+    if (s.customerAddress) paymentMeta.customerAddress = s.customerAddress;
+    if (s.customerGstin) paymentMeta.customerGstin = s.customerGstin;
+    if (s.taxMode) paymentMeta.taxMode = s.taxMode;
+    if (s.taxRate !== undefined) paymentMeta.taxRate = s.taxRate;
 
     if (Object.keys(paymentMeta).length > 0) {
       const metaTag = `<!--PAYMENT_META:${JSON.stringify(paymentMeta)}-->`;

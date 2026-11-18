@@ -1,21 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Printer, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import { Button } from '../components/ui/Button';
-import type { Sale } from '../types';
+import type { Sale, Customer } from '../types';
+import { dataService } from '../services/dataService';
 
 interface InvoicePrintModalProps {
   isOpen: boolean;
   onClose: () => void;
   sale: Sale | null;
+  customer?: Customer | null;
+  customers?: Customer[];
 }
 
 export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
   isOpen,
   onClose,
   sale,
+  customer,
+  customers,
 }) => {
   const [printFormat, setPrintFormat] = useState<'A4' | 'Thermal'>('A4');
+  const [customerDetails, setCustomerDetails] = useState<Customer | null>(customer || null);
+
+  useEffect(() => {
+    if (customer) {
+      setCustomerDetails(customer);
+      return;
+    }
+    if (sale?.customerId) {
+      if (customers && customers.length > 0) {
+        const found = customers.find(c => c.id === sale.customerId);
+        if (found) {
+          setCustomerDetails(found);
+          return;
+        }
+      }
+      dataService.getCustomers().then(list => {
+        const found = list.find(c => c.id === sale.customerId);
+        if (found) setCustomerDetails(found);
+      }).catch(() => {});
+    } else {
+      setCustomerDetails(null);
+    }
+  }, [sale, customer, customers]);
 
   if (!sale) return null;
 
@@ -227,10 +255,28 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                 <p style={{ fontSize: '14px', fontWeight: 700, margin: '2px 0 0 0', color: '#111827' }}>
                   {sale.customerName}
                 </p>
-                {sale.customerPhone && (
-                  <p style={{ fontSize: '12px', color: '#4B5563', margin: '2px 0 0 0' }}>
-                    Phone: {sale.customerPhone}
-                  </p>
+                {/* Only include address, GSTIN, and mobile below customer name if selected from our list */}
+                {sale.customerId ? (
+                  <>
+                    {(sale.customerAddress || customerDetails?.address) && (
+                      <p style={{ fontSize: '11px', color: '#6B7280', margin: '2px 0 0 0' }}>
+                        {sale.customerAddress || customerDetails?.address}
+                      </p>
+                    )}
+                    {((sale.customerGstin || customerDetails?.gstin) || (sale.customerPhone || customerDetails?.phone)) && (
+                      <p style={{ fontSize: '11px', color: '#6B7280', margin: '2px 0 0 0' }}>
+                        {(sale.customerGstin || customerDetails?.gstin) ? `GSTIN: ${sale.customerGstin || customerDetails?.gstin}` : ''}
+                        {((sale.customerGstin || customerDetails?.gstin) && (sale.customerPhone || customerDetails?.phone)) ? ' | ' : ''}
+                        {(sale.customerPhone || customerDetails?.phone) ? `Mobile: ${sale.customerPhone || customerDetails?.phone}` : ''}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  sale.customerPhone && (
+                    <p style={{ fontSize: '12px', color: '#4B5563', margin: '2px 0 0 0' }}>
+                      Phone: {sale.customerPhone}
+                    </p>
+                  )
                 )}
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -284,14 +330,18 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
             {/* Calculations & Summary */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
-              <div style={{ width: '290px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ width: '310px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4B5563' }}>
                   <span>Subtotal:</span>
                   <span>₹{formatCurrency(sale.subtotal)}</span>
                 </div>
                 {sale.taxAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4B5563' }}>
-                    <span>GST ({sale.taxRate}% Included):</span>
+                    <span>
+                      {sale.taxMode === 'included' || (!sale.taxMode && Math.abs(sale.grandTotal - (sale.subtotal - (sale.discountAmount || 0))) < 0.05)
+                        ? 'GST Already Paid (18% Included):'
+                        : `GST (${sale.taxRate}% Added):`}
+                    </span>
                     <span>₹{formatCurrency(sale.taxAmount)}</span>
                   </div>
                 )}
@@ -383,6 +433,23 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
                 Inv: {sale.invoiceNumber}
               </p>
               <p style={{ margin: 0, fontSize: '10px', color: '#6B7280' }}>{formattedDate}</p>
+              <p style={{ margin: '4px 0 0 0', fontSize: '11px', fontWeight: 700 }}>Cust: {sale.customerName}</p>
+              {sale.customerId ? (
+                <>
+                  {(sale.customerAddress || customerDetails?.address) && (
+                    <p style={{ margin: '1px 0 0 0', fontSize: '10px', color: '#4B5563' }}>{sale.customerAddress || customerDetails?.address}</p>
+                  )}
+                  {((sale.customerGstin || customerDetails?.gstin) || (sale.customerPhone || customerDetails?.phone)) && (
+                    <p style={{ margin: '1px 0 0 0', fontSize: '10px', color: '#4B5563' }}>
+                      {(sale.customerGstin || customerDetails?.gstin) ? `GSTIN: ${sale.customerGstin || customerDetails?.gstin}` : ''}
+                      {((sale.customerGstin || customerDetails?.gstin) && (sale.customerPhone || customerDetails?.phone)) ? ' | ' : ''}
+                      {(sale.customerPhone || customerDetails?.phone) ? `Mob: ${sale.customerPhone || customerDetails?.phone}` : ''}
+                    </p>
+                  )}
+                </>
+              ) : (
+                sale.customerPhone && <p style={{ margin: '1px 0 0 0', fontSize: '10px', color: '#4B5563' }}>Phone: {sale.customerPhone}</p>
+              )}
             </div>
 
             <div style={{ borderTop: '1px dashed #000', borderBottom: '1px dashed #000', padding: '8px 0', margin: '8px 0' }}>
@@ -404,7 +471,13 @@ export const InvoicePrintModal: React.FC<InvoicePrintModalProps> = ({
 
             <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div>Subtotal: ₹{formatCurrency(sale.subtotal)}</div>
-              {sale.taxAmount > 0 && <div>GST ({sale.taxRate}%): ₹{formatCurrency(sale.taxAmount)}</div>}
+              {sale.taxAmount > 0 && (
+                <div>
+                  {sale.taxMode === 'included' || (!sale.taxMode && Math.abs(sale.grandTotal - (sale.subtotal - (sale.discountAmount || 0))) < 0.05)
+                    ? `GST Already Paid (18%): ₹${formatCurrency(sale.taxAmount)}`
+                    : `GST (${sale.taxRate}%): ₹${formatCurrency(sale.taxAmount)}`}
+                </div>
+              )}
               {sale.discountAmount > 0 && <div style={{ color: '#DC2626' }}>Discount: -₹{formatCurrency(sale.discountAmount)}</div>}
               <div style={{
                 fontSize: '15px',

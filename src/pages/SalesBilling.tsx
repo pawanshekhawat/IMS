@@ -723,6 +723,7 @@ export const SalesBilling: React.FC = () => {
         isOpen={!!saleForPrint}
         onClose={() => setSaleForPrint(null)}
         sale={saleForPrint}
+        customers={customers}
       />
 
       {/* Delete Single Invoice with Stock Choice */}

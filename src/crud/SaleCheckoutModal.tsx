@@ -28,7 +28,7 @@ export const SaleCheckoutModal: React.FC<SaleCheckoutModalProps> = ({
   const [customerPhone, setCustomerPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('UPI');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [taxRate, setTaxRate] = useState<number>(18); // default 18% GST for lighting fixtures
+  const [taxMode, setTaxMode] = useState<'included' | 'added'>('included');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,8 +40,21 @@ export const SaleCheckoutModal: React.FC<SaleCheckoutModalProps> = ({
   const [upiAmountInput, setUpiAmountInput] = useState<string>('');
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.total, 0);
-  const taxAmount = (subtotal * taxRate) / 100;
-  const grandTotal = Math.max(0, subtotal + taxAmount - discountAmount);
+  const taxRate = 18;
+
+  let taxAmount = 0;
+  let grandTotal = 0;
+
+  if (taxMode === 'included') {
+    // GST is calculated inside actual product price: Net Base = subtotal - discountAmount
+    const netBase = Math.max(0, subtotal - discountAmount);
+    taxAmount = Math.round(((netBase * 18 / 118) + Number.EPSILON) * 100) / 100;
+    grandTotal = netBase;
+  } else {
+    // +18% GST added on top of subtotal
+    taxAmount = Math.round(((subtotal * 18 / 100) + Number.EPSILON) * 100) / 100;
+    grandTotal = Math.max(0, subtotal + taxAmount - discountAmount);
+  }
 
   // Sync default paid amount with grandTotal unless staff customized it
   useEffect(() => {
@@ -130,14 +143,19 @@ export const SaleCheckoutModal: React.FC<SaleCheckoutModalProps> = ({
     setError('');
 
     try {
+      const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+
       const createdSale = await dataService.createSale({
         customerId: selectedCustomerId || undefined,
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim() || undefined,
+        customerAddress: selectedCustomerId && selectedCustomer?.address ? selectedCustomer.address : undefined,
+        customerGstin: selectedCustomerId && selectedCustomer?.gstin ? selectedCustomer.gstin : undefined,
         items: cartItems,
         subtotal,
         taxRate,
         taxAmount,
+        taxMode,
         discountAmount,
         grandTotal,
         paidAmount: effectivePaidAmount,
@@ -217,7 +235,13 @@ export const SaleCheckoutModal: React.FC<SaleCheckoutModalProps> = ({
           </div>
           <div style={{ textAlign: 'right', fontSize: '12px', color: 'var(--color-primary-200)' }}>
             <div>Subtotal: ₹{subtotal.toLocaleString('en-IN')}</div>
-            {taxAmount > 0 && <div>GST ({taxRate}%): ₹{taxAmount.toLocaleString('en-IN')}</div>}
+            {taxAmount > 0 && (
+              <div>
+                {taxMode === 'included'
+                  ? `GST (18% Already Paid): ₹${taxAmount.toLocaleString('en-IN')}`
+                  : `GST (+18% Added): ₹${taxAmount.toLocaleString('en-IN')}`}
+              </div>
+            )}
             {discountAmount > 0 && <div style={{ color: 'var(--color-tertiary-400)' }}>Disc: -₹{discountAmount}</div>}
           </div>
         </div>
@@ -263,14 +287,15 @@ export const SaleCheckoutModal: React.FC<SaleCheckoutModalProps> = ({
             options={PAYMENT_METHODS.map(m => ({ value: m, label: m }))}
           />
           <Select
-            label="GST Rate"
-            value={taxRate}
-            onChange={(e) => setTaxRate(Number(e.target.value))}
+            label="GST Option"
+            value={taxMode}
+            onChange={(e) => {
+              setTaxMode(e.target.value as 'included' | 'added');
+              setIsCustomPaid(false);
+            }}
             options={[
-              { value: 18, label: '18% GST (Standard Fixtures)' },
-              { value: 12, label: '12% GST' },
-              { value: 5, label: '5% GST' },
-              { value: 0, label: '0% (Exempt / Bill without GST)' },
+              { value: 'included', label: 'GST Already Paid / Included (in Product Price)' },
+              { value: 'added', label: '+18% GST (Added on Subtotal)' },
             ]}
           />
         </div>

@@ -145,7 +145,7 @@ export const CustomerCrudModal: React.FC<CustomerCrudModalProps> = ({
 
         <Input
           label="Billing / Delivery Address"
-          placeholder="e.g. Mall Road, Mussoorie / Rajpur Road, Dehradun"
+          placeholder="e.g. Piprali Road, Sikar, Rajasthan"
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
         />

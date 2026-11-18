@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Edit2, Trash2, Phone, Mail, MapPin } from 'lucide-react';
+import { Eye, Edit2, Trash2, Phone, Mail, MapPin } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Table, type TableColumn } from '../components/ui/Table';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
 import { dataService } from '../services/dataService';
 import type { Customer } from '../types';
 import { CustomerCrudModal } from '../crud/CustomerCrudModal';
+import { CustomerDetailsModal } from '../crud/CustomerDetailsModal';
 
 export const Customers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
+  const [customerForView, setCustomerForView] = useState<Customer | null>(null);
 
   // Custom confirmation modal state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -82,8 +84,18 @@ export const Customers: React.FC = () => {
     {
       header: 'Customer / Client Name',
       accessor: (c) => (
-        <div>
-          <div style={{ fontWeight: 700, color: 'var(--color-neutral-900)', fontSize: '13px' }}>
+        <div
+          onClick={() => setCustomerForView(c)}
+          style={{ cursor: 'pointer' }}
+          title="Click to view full profile, purchase breakdown & invoice history"
+        >
+          <div style={{
+            fontWeight: 700,
+            color: 'var(--color-primary-800)',
+            fontSize: '13px',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+          }}>
             {c.name}
           </div>
           {c.gstin && (
@@ -146,6 +158,25 @@ export const Customers: React.FC = () => {
       header: 'Actions',
       accessor: (c) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => setCustomerForView(c)}
+            title="View Details, Invoices & Past Orders"
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: 'rgba(6, 77, 61, 0.1)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-primary-800)',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Eye size={14} />
+          </button>
           <button
             onClick={() => {
               setCustomerToEdit(c);
@@ -221,6 +252,16 @@ export const Customers: React.FC = () => {
         }}
         onSuccess={loadData}
         customerToEdit={customerToEdit}
+      />
+
+      <CustomerDetailsModal
+        isOpen={!!customerForView}
+        onClose={() => setCustomerForView(null)}
+        customer={customerForView}
+        onEditCustomer={(c) => {
+          setCustomerToEdit(c);
+          setIsModalOpen(true);
+        }}
       />
 
       <ConfirmModal

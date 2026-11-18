@@ -1,5 +1,6 @@
 export * from './ProductCrudModal';
 export * from './CustomerCrudModal';
+export * from './CustomerDetailsModal';
 export * from './SupplierCrudModal';
 export * from './PurchaseCrudModal';
 export * from './ExpenseCrudModal';
