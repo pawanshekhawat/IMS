@@ -45,6 +45,7 @@ export interface IDataService {
   getSales(forceRefresh?: boolean): Promise<Sale[]>;
   getSaleById(id: string): Promise<Sale | undefined>;
   createSale(saleData: Omit<Sale, 'id' | 'createdAt' | 'invoiceNumber'>): Promise<Sale>;
+  updateSale(id: string, updates: Partial<Sale>, adjustStock?: boolean): Promise<Sale>;
   deleteSale(id: string, restoreInventory?: boolean): Promise<void>;
   clearAllSales(restoreInventory?: boolean): Promise<number>;
 
@@ -697,6 +698,146 @@ class SupabaseDataServiceImpl implements IDataService {
     }
 
     return sale;
+  }
+
+  async updateSale(id: string, updates: Partial<Sale>, adjustStock: boolean = true): Promise<Sale> {
+    this.ensureAdminRole('edit invoice and sales records');
+    rateLimiter.enforceLimit('update_sale_limit', 30, 60 * 1000, 'update sales invoices');
+
+    const oldSale = await this.getSaleById(id);
+    if (!oldSale) {
+      throw new Error(`Invoice with ID ${id} not found in cloud database.`);
+    }
+
+    const updatedSale: Sale = {
+      ...oldSale,
+      ...updates,
+      id: oldSale.id,
+      invoiceNumber: updates.invoiceNumber || oldSale.invoiceNumber,
+    };
+
+    // Auto-fill customer details from cache if customer was chosen from list
+    if (updatedSale.customerId) {
+      const cust = this.cache.customers?.find(c => c.id === updatedSale.customerId);
+      if (cust) {
+        if (!updatedSale.customerAddress && cust.address) updatedSale.customerAddress = cust.address;
+        if (!updatedSale.customerGstin && cust.gstin) updatedSale.customerGstin = cust.gstin;
+        if (!updatedSale.customerPhone && cust.phone) updatedSale.customerPhone = cust.phone;
+      }
+    }
+
+    const supabase = getRequiredSupabase();
+
+    // 1. Adjust inventory differences if adjustStock is true and items were updated
+    if (adjustStock && updates.items) {
+      const oldItemMap = new Map<string, number>();
+      (oldSale.items || []).forEach(i => {
+        oldItemMap.set(i.productId, (oldItemMap.get(i.productId) || 0) + i.quantity);
+      });
+
+      const newItemMap = new Map<string, number>();
+      (updatedSale.items || []).forEach(i => {
+        newItemMap.set(i.productId, (newItemMap.get(i.productId) || 0) + i.quantity);
+      });
+
+      const allProductIds = new Set([...oldItemMap.keys(), ...newItemMap.keys()]);
+      for (const prodId of allProductIds) {
+        const oldQty = oldItemMap.get(prodId) || 0;
+        const newQty = newItemMap.get(prodId) || 0;
+        const diff = newQty - oldQty;
+        if (diff > 0) {
+          // Sold more: deduct from stock
+          await this.adjustStock(
+            prodId,
+            -diff,
+            'OUT',
+            `Invoice #${updatedSale.invoiceNumber} updated (quantity increased by ${diff})`
+          );
+        } else if (diff < 0) {
+          // Sold less: restore to stock
+          await this.adjustStock(
+            prodId,
+            Math.abs(diff),
+            'IN',
+            `Invoice #${updatedSale.invoiceNumber} updated (quantity reduced by ${Math.abs(diff)})`
+          );
+        }
+      }
+    }
+
+    // 2. Adjust customer lifetime spend & outstanding balance
+    const oldPending = oldSale.pendingAmount !== undefined 
+      ? oldSale.pendingAmount 
+      : (oldSale.paymentStatus === 'Pending' ? oldSale.grandTotal : 0);
+    const newPending = updatedSale.pendingAmount !== undefined 
+      ? updatedSale.pendingAmount 
+      : (updatedSale.paymentStatus === 'Pending' ? updatedSale.grandTotal : 0);
+
+    // If customer changed
+    if (oldSale.customerId && oldSale.customerId !== updatedSale.customerId) {
+      try {
+        const oldCust = this.cache.customers?.find(c => c.id === oldSale.customerId);
+        if (oldCust) {
+          await this.updateCustomer(oldCust.id, {
+            totalPurchases: Math.max(0, oldCust.totalPurchases - oldSale.grandTotal),
+            outstandingBalance: Math.max(0, oldCust.outstandingBalance - oldPending),
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to update old customer balance on sale update', e);
+      }
+
+      if (updatedSale.customerId) {
+        try {
+          const newCust = this.cache.customers?.find(c => c.id === updatedSale.customerId);
+          if (newCust) {
+            await this.updateCustomer(newCust.id, {
+              totalPurchases: newCust.totalPurchases + updatedSale.grandTotal,
+              outstandingBalance: newCust.outstandingBalance + newPending,
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to update new customer balance on sale update', e);
+        }
+      }
+    } else if (updatedSale.customerId) {
+      const totalDelta = updatedSale.grandTotal - oldSale.grandTotal;
+      const pendingDelta = newPending - oldPending;
+      if (totalDelta !== 0 || pendingDelta !== 0) {
+        try {
+          const cust = this.cache.customers?.find(c => c.id === updatedSale.customerId);
+          if (cust) {
+            await this.updateCustomer(cust.id, {
+              totalPurchases: Math.max(0, cust.totalPurchases + totalDelta),
+              outstandingBalance: Math.max(0, cust.outstandingBalance + pendingDelta),
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to update customer balance on sale update', e);
+        }
+      }
+    }
+
+    // 3. Update memory cache immediately
+    if (this.cache.sales) {
+      this.cache.sales = this.cache.sales.map(s => s.id === id ? updatedSale : s);
+    }
+
+    // 4. Update Supabase
+    const { error } = await supabase
+      .from('sales')
+      .update(this.mapSaleToDb(updatedSale))
+      .eq('id', id);
+
+    if (error) {
+      if (this.cache.sales) {
+        this.cache.sales = this.cache.sales.map(s => s.id === id ? oldSale : s);
+      }
+      console.error('Supabase updateSale error:', error);
+      throw new Error(`Failed to update invoice in cloud database: ${error.message}`);
+    }
+
+    return updatedSale;
   }
 
   async deleteSale(id: string, restoreInventory: boolean = true): Promise<void> {
@@ -1416,6 +1557,7 @@ class SupabaseDataServiceImpl implements IDataService {
       items: s.items,
       notes: finalNotes,
       cashier_name: 'Counter Staff',
+      created_at: s.createdAt,
     };
   }
 

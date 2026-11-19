@@ -8,7 +8,12 @@ import {
   Printer, 
   ShoppingCart, 
   Barcode, 
-  History 
+  History,
+  Edit3,
+  IndianRupee,
+  AlertCircle,
+  Clock,
+  User
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Button } from '../components/ui/Button';
@@ -21,11 +26,14 @@ import type { Product, Customer, Sale, SaleItem } from '../types';
 import { SaleCheckoutModal } from '../crud/SaleCheckoutModal';
 import { InvoicePrintModal } from '../crud/InvoicePrintModal';
 import { DeleteRecordModal } from '../crud/DeleteRecordModal';
+import { InvoiceEditModal } from '../crud/InvoiceEditModal';
+import { ReceivePaymentModal } from '../crud/ReceivePaymentModal';
+import { CustomerDetailsModal } from '../crud/CustomerDetailsModal';
 import { useAuth } from '../context/AuthContext';
 
 export const SalesBilling: React.FC = () => {
   const { isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState<'pos' | 'history'>('pos');
+  const [activeTab, setActiveTab] = useState<'pos' | 'history' | 'pending'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [salesHistory, setSalesHistory] = useState<Sale[]>([]);
@@ -39,6 +47,15 @@ export const SalesBilling: React.FC = () => {
   // Modals
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [saleForPrint, setSaleForPrint] = useState<Sale | null>(null);
+
+  // Invoice Edit & Payment Collection State
+  const [saleForEdit, setSaleForEdit] = useState<Sale | null>(null);
+  const [saleForReceivePayment, setSaleForReceivePayment] = useState<Sale | null>(null);
+  const [customerForDetails, setCustomerForDetails] = useState<Customer | null>(null);
+
+  // Pending Tab Filters
+  const [pendingFilter, setPendingFilter] = useState<'ALL' | 'PARTIAL' | 'PENDING'>('ALL');
+  const [pendingSearch, setPendingSearch] = useState<string>('');
 
   // Invoice Deletion & History Clear State
   const [saleToDelete, setSaleToDelete] = useState<Sale | null>(null);
@@ -267,6 +284,17 @@ export const SalesBilling: React.FC = () => {
           </Button>
           {isAdmin && (
             <Button
+              variant="secondary"
+              size="sm"
+              icon={<Edit3 size={13} />}
+              onClick={() => setSaleForEdit(s)}
+              title="Edit Invoice Details"
+            >
+              Edit
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
               variant="danger"
               size="sm"
               icon={<Trash2 size={13} />}
@@ -274,6 +302,213 @@ export const SalesBilling: React.FC = () => {
               title="Delete Invoice & Restore Inventory"
             >
               Delete
+            </Button>
+          )}
+        </div>
+      ),
+      align: 'right',
+    },
+  ];
+
+  // Pending & Partial Payments Calculations
+  const pendingInvoices = salesHistory.filter(s => {
+    const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+    const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+    return s.paymentStatus === 'Pending' || s.paymentStatus === 'Partial' || pending > 0;
+  });
+
+  const partialInvoicesCount = pendingInvoices.filter(s => {
+    const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+    const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+    return s.paymentStatus === 'Partial' || (paid > 0 && pending > 0);
+  }).length;
+
+  const fullyPendingCount = pendingInvoices.length - partialInvoicesCount;
+
+  const totalPendingDueAmount = pendingInvoices.reduce((sum, s) => {
+    const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+    const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+    return sum + pending;
+  }, 0);
+
+  const uniqueCustomersCount = new Set(
+    pendingInvoices.map(s => s.customerId || s.customerPhone || s.customerName)
+  ).size;
+
+  const filteredPendingInvoices = pendingInvoices.filter(s => {
+    const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+    const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+    const isPartial = s.paymentStatus === 'Partial' || (paid > 0 && pending > 0);
+
+    if (pendingFilter === 'PARTIAL' && !isPartial) return false;
+    if (pendingFilter === 'PENDING' && isPartial) return false;
+
+    if (pendingSearch.trim()) {
+      const q = pendingSearch.toLowerCase();
+      const matchInv = s.invoiceNumber.toLowerCase().includes(q);
+      const matchName = s.customerName.toLowerCase().includes(q);
+      const matchPhone = s.customerPhone ? s.customerPhone.toLowerCase().includes(q) : false;
+      return matchInv || matchName || matchPhone;
+    }
+    return true;
+  });
+
+  const pendingColumns: TableColumn<Sale>[] = [
+    {
+      header: 'Invoice # & Date',
+      accessor: (s) => (
+        <div>
+          <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--color-primary-800)' }}>
+            {s.invoiceNumber}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--color-neutral-500)', marginTop: '2px' }}>
+            {new Date(s.createdAt).toLocaleDateString('en-IN', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: 'Customer Details',
+      accessor: (s) => {
+        const cust = customers.find(c => c.id === s.customerId || (s.customerPhone && c.phone === s.customerPhone));
+        return (
+          <div>
+            <div
+              style={{
+                fontWeight: 700,
+                fontSize: '13px',
+                color: cust ? 'var(--color-primary-800)' : 'var(--color-neutral-900)',
+                cursor: cust ? 'pointer' : 'default',
+                textDecoration: cust ? 'underline' : 'none',
+              }}
+              onClick={() => {
+                if (cust) setCustomerForDetails(cust);
+              }}
+              title={cust ? "Click to view full customer history" : undefined}
+            >
+              {s.customerName}
+            </div>
+            {s.customerPhone && (
+              <div style={{ fontSize: '11px', color: 'var(--color-neutral-600)', marginTop: '1px' }}>
+                📞 {s.customerPhone}
+              </div>
+            )}
+            {s.customerGstin && (
+              <div style={{ fontSize: '10px', color: 'var(--color-neutral-500)', marginTop: '1px' }}>
+                GSTIN: {s.customerGstin}
+              </div>
+            )}
+            {s.customerAddress && (
+              <div style={{ fontSize: '10px', color: 'var(--color-neutral-400)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                📍 {s.customerAddress}
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      header: 'Billed Items',
+      accessor: (s) => (
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-neutral-800)' }}>
+            {s.items.length} items ({s.items.reduce((sum, i) => sum + i.quantity, 0)} units)
+          </div>
+          <div 
+            style={{ fontSize: '11px', color: 'var(--color-neutral-500)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }} 
+            title={s.items.map(i => `${i.productName} (x${i.quantity})`).join(', ')}
+          >
+            {s.items.map(i => i.productName).join(', ')}
+          </div>
+        </div>
+      ),
+    },
+    {
+      header: 'Total & Paid',
+      accessor: (s) => {
+        const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+        return (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-neutral-900)' }}>
+              ₹{s.grandTotal.toLocaleString('en-IN')}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--color-neutral-600)' }}>
+              Paid: ₹{paid.toLocaleString('en-IN')}
+            </div>
+            <div style={{ fontSize: '10px', color: 'var(--color-neutral-500)' }}>
+              via {s.paymentMethod}
+            </div>
+          </div>
+        );
+      },
+      align: 'right',
+    },
+    {
+      header: 'Pending Due Balance',
+      accessor: (s) => {
+        const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+        const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+        return (
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '15px', fontWeight: 900, color: '#DC2626' }}>
+              ₹{pending.toLocaleString('en-IN')}
+            </div>
+          </div>
+        );
+      },
+      align: 'right',
+    },
+    {
+      header: 'Payment Status',
+      accessor: (s) => {
+        const paid = s.paidAmount !== undefined ? s.paidAmount : (s.paymentStatus === 'Pending' ? 0 : s.grandTotal);
+        const pending = s.pendingAmount !== undefined ? s.pendingAmount : Math.max(0, s.grandTotal - paid);
+        const isPartial = s.paymentStatus === 'Partial' || (paid > 0 && pending > 0);
+        return (
+          <Badge variant={isPartial ? 'warning' : 'danger'}>
+            {isPartial ? 'Partial (Half Paid)' : 'Fully Pending'}
+          </Badge>
+        );
+      },
+      align: 'center',
+    },
+    {
+      header: 'Actions',
+      accessor: (s) => (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<IndianRupee size={13} />}
+            onClick={() => setSaleForReceivePayment(s)}
+            title="Receive Payment against this bill"
+          >
+            Collect
+          </Button>
+          <Button
+            variant="outlined"
+            size="sm"
+            icon={<Printer size={13} />}
+            onClick={() => setSaleForPrint(s)}
+            title="Print Invoice"
+          >
+            Invoice
+          </Button>
+          {isAdmin && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Edit3 size={13} />}
+              onClick={() => setSaleForEdit(s)}
+              title="Edit Invoice Details"
+            >
+              Edit
             </Button>
           )}
         </div>
@@ -291,8 +526,8 @@ export const SalesBilling: React.FC = () => {
       <Header
         title="Billing & Sales (POS)"
         subtitle="Fast showroom billing, barcode checkout, and instant GST invoice printing"
-        quickActionLabel={activeTab === 'pos' ? 'View Sales History' : 'Back to POS'}
-        onQuickAction={() => setActiveTab(activeTab === 'pos' ? 'history' : 'pos')}
+        quickActionLabel={activeTab === 'pos' ? 'Pending Dues & Khata' : 'Back to POS'}
+        onQuickAction={() => setActiveTab(activeTab === 'pos' ? 'pending' : 'pos')}
       />
 
       {/* Mode Switcher Tabs */}
@@ -344,6 +579,40 @@ export const SalesBilling: React.FC = () => {
         >
           <History size={15} color={activeTab === 'history' ? '#FFFFFF' : 'var(--color-neutral-600)'} />
           <span>Sales Invoices History ({salesHistory.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('pending')}
+          style={{
+            padding: '8px 20px',
+            borderRadius: '9999px',
+            border: 'none',
+            cursor: 'pointer',
+            fontWeight: 700,
+            fontSize: '13px',
+            backgroundColor: activeTab === 'pending' ? '#DC2626' : '#FFFFFF',
+            color: activeTab === 'pending' ? '#FFFFFF' : 'var(--color-neutral-700)',
+            boxShadow: activeTab === 'pending' ? '0 2px 8px rgba(220, 38, 38, 0.25)' : 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all var(--transition-fast)',
+          }}
+        >
+          <AlertCircle size={15} color={activeTab === 'pending' ? '#FFFFFF' : '#DC2626'} />
+          <span>Pending & Partial Dues ({pendingInvoices.length})</span>
+          {pendingInvoices.length > 0 && (
+            <span style={{
+              backgroundColor: activeTab === 'pending' ? 'rgba(255,255,255,0.25)' : '#FEE2E2',
+              color: activeTab === 'pending' ? '#FFFFFF' : '#DC2626',
+              padding: '2px 8px',
+              borderRadius: '9999px',
+              fontSize: '11px',
+              fontWeight: 800,
+            }}>
+              ₹{totalPendingDueAmount.toLocaleString('en-IN')}
+            </span>
+          )}
         </button>
       </div>
 
@@ -680,7 +949,7 @@ export const SalesBilling: React.FC = () => {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'history' ? (
         /* Sales Invoices History View */
         <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {isAdmin && salesHistory.length > 0 && (
@@ -704,6 +973,243 @@ export const SalesBilling: React.FC = () => {
             emptyMessage="No completed invoices found."
           />
         </div>
+      ) : (
+        /* Pending & Partial Dues (Khata Tracker) View */
+        <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Top KPI Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gap: '16px',
+          }}>
+            {/* Total Balance Due Card */}
+            <div style={{
+              background: 'linear-gradient(135deg, #FEF2F2 0%, #FFFFFF 100%)',
+              border: '1px solid #FECACA',
+              borderRadius: 'var(--radius-lg)',
+              padding: '18px 20px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              boxShadow: '0 2px 4px rgba(239, 68, 68, 0.05)',
+            }}>
+              <div style={{
+                backgroundColor: '#FEE2E2',
+                color: '#DC2626',
+                padding: '10px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <IndianRupee size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#991B1B' }}>
+                  Total Dues Outstanding
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#DC2626', marginTop: '2px' }}>
+                  ₹{totalPendingDueAmount.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-neutral-600)', marginTop: '2px' }}>
+                  Across {pendingInvoices.length} pending / partial bills
+                </div>
+              </div>
+            </div>
+
+            {/* Half / Partial Payments Card */}
+            <div style={{
+              background: 'linear-gradient(135deg, #FFFBEB 0%, #FFFFFF 100%)',
+              border: '1px solid #FDE68A',
+              borderRadius: 'var(--radius-lg)',
+              padding: '18px 20px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.05)',
+            }}>
+              <div style={{
+                backgroundColor: '#FEF3C7',
+                color: '#D97706',
+                padding: '10px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Clock size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#B45309' }}>
+                  Half / Partial Payments
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#D97706', marginTop: '2px' }}>
+                  {partialInvoicesCount} <span style={{ fontSize: '14px', fontWeight: 600 }}>Invoices</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-neutral-600)', marginTop: '2px' }}>
+                  Deposit paid, remaining due
+                </div>
+              </div>
+            </div>
+
+            {/* Fully Pending Card */}
+            <div style={{
+              background: 'linear-gradient(135deg, #FFF1F2 0%, #FFFFFF 100%)',
+              border: '1px solid #FECDD3',
+              borderRadius: 'var(--radius-lg)',
+              padding: '18px 20px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              boxShadow: '0 2px 4px rgba(225, 29, 72, 0.05)',
+            }}>
+              <div style={{
+                backgroundColor: '#FFE4E6',
+                color: '#E11D48',
+                padding: '10px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <AlertCircle size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9F1239' }}>
+                  Fully Unpaid (Pending)
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#E11D48', marginTop: '2px' }}>
+                  {fullyPendingCount} <span style={{ fontSize: '14px', fontWeight: 600 }}>Invoices</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-neutral-600)', marginTop: '2px' }}>
+                  Zero payment collected on billing
+                </div>
+              </div>
+            </div>
+
+            {/* Customers with dues */}
+            <div style={{
+              background: '#FFFFFF',
+              border: '1px solid var(--color-neutral-200)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '18px 20px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '14px',
+              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.03)',
+            }}>
+              <div style={{
+                backgroundColor: 'var(--color-primary-50)',
+                color: 'var(--color-primary-800)',
+                padding: '10px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <User size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-neutral-600)' }}>
+                  Customers in Khata
+                </div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: 'var(--color-neutral-900)', marginTop: '2px' }}>
+                  {uniqueCustomersCount} <span style={{ fontSize: '14px', fontWeight: 600 }}>People</span>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--color-neutral-600)', marginTop: '2px' }}>
+                  Click customer to view history ledger
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Search & Filter Toolbar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '16px',
+            backgroundColor: '#FFFFFF',
+            padding: '14px 18px',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid var(--color-neutral-200)',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                type="button"
+                onClick={() => setPendingFilter('ALL')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  border: '1px solid',
+                  borderColor: pendingFilter === 'ALL' ? '#DC2626' : 'var(--color-neutral-300)',
+                  backgroundColor: pendingFilter === 'ALL' ? '#DC2626' : '#FFFFFF',
+                  color: pendingFilter === 'ALL' ? '#FFFFFF' : 'var(--color-neutral-700)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                All Dues ({pendingInvoices.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingFilter('PARTIAL')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  border: '1px solid',
+                  borderColor: pendingFilter === 'PARTIAL' ? '#D97706' : 'var(--color-neutral-300)',
+                  backgroundColor: pendingFilter === 'PARTIAL' ? '#D97706' : '#FFFFFF',
+                  color: pendingFilter === 'PARTIAL' ? '#FFFFFF' : 'var(--color-neutral-700)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Half / Partial Payments ({partialInvoicesCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingFilter('PENDING')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  border: '1px solid',
+                  borderColor: pendingFilter === 'PENDING' ? '#E11D48' : 'var(--color-neutral-300)',
+                  backgroundColor: pendingFilter === 'PENDING' ? '#E11D48' : '#FFFFFF',
+                  color: pendingFilter === 'PENDING' ? '#FFFFFF' : 'var(--color-neutral-700)',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Fully Pending ({fullyPendingCount})
+              </button>
+            </div>
+
+            <div style={{ width: '320px' }}>
+              <Input
+                placeholder="Search customer, phone, or bill #..."
+                value={pendingSearch}
+                onChange={(e) => setPendingSearch(e.target.value)}
+                icon={<Search size={15} color="var(--color-neutral-400)" />}
+              />
+            </div>
+          </div>
+
+          {/* Pending Invoices Table */}
+          <Table
+            columns={pendingColumns}
+            data={filteredPendingInvoices}
+            keyExtractor={(s) => s.id}
+            emptyMessage={pendingSearch ? "No dues matched your search." : "No pending or partial payments found! All bills are settled."}
+          />
+        </div>
       )}
 
       {/* Modals */}
@@ -725,6 +1231,45 @@ export const SalesBilling: React.FC = () => {
         sale={saleForPrint}
         customers={customers}
       />
+
+      {/* Edit Invoice Modal */}
+      {saleForEdit && (
+        <InvoiceEditModal
+          isOpen={!!saleForEdit}
+          onClose={() => setSaleForEdit(null)}
+          sale={saleForEdit}
+          customers={customers}
+          products={products}
+          onSaleUpdated={(updatedSale) => {
+            setSaleForEdit(null);
+            loadData();
+            showNotice('Invoice Updated', `Invoice #${updatedSale.invoiceNumber} has been updated successfully. Inventory and customer balance synced!`, 'info');
+          }}
+        />
+      )}
+
+      {/* Receive / Collect Payment Modal */}
+      {saleForReceivePayment && (
+        <ReceivePaymentModal
+          isOpen={!!saleForReceivePayment}
+          onClose={() => setSaleForReceivePayment(null)}
+          sale={saleForReceivePayment}
+          onPaymentReceived={(updatedSale) => {
+            setSaleForReceivePayment(null);
+            loadData();
+            showNotice('Payment Recorded', `Payment recorded successfully for invoice #${updatedSale.invoiceNumber}! Remaining balance: ₹${(updatedSale.pendingAmount || 0).toLocaleString('en-IN')}`, 'info');
+          }}
+        />
+      )}
+
+      {/* Customer Details Modal */}
+      {customerForDetails && (
+        <CustomerDetailsModal
+          isOpen={!!customerForDetails}
+          onClose={() => setCustomerForDetails(null)}
+          customer={customerForDetails}
+        />
+      )}
 
       {/* Delete Single Invoice with Stock Choice */}
       {saleToDelete && (
